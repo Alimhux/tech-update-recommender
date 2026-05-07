@@ -1,0 +1,67 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "depscope"
+version = "0.1.0"
+description = "Open-source CLI utility for local dependency analysis with AI-powered update recommendations."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [
+    { name = "DepScope Contributors" },
+]
+keywords = ["dependencies", "sbom", "syft", "deps.dev", "security", "cli"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development",
+    "Topic :: Security",
+]
+dependencies = [
+    "click",
+    "packageurl-python",
+    "packaging",
+    "aiohttp",
+    "pydantic>=2",
+    "rich",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+llm = ["litellm"]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "aioresponses",
+    "ruff",
+]
+
+[project.scripts]
+depscope = "depscope.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/depscope/depscope"
+Issues = "https://github.com/depscope/depscope/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["depscope"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]

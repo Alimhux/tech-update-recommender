@@ -1,0 +1,65 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:1c0a3b1f-2222-4d2c-9aaa-000000000002",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-05-07T12:00:00Z",
+    "tools": [
+      {
+        "vendor": "anchore",
+        "name": "syft",
+        "version": "1.18.0"
+      }
+    ],
+    "component": {
+      "bom-ref": "depscope-fixture-mixed",
+      "type": "file",
+      "name": "/tmp/sample-mixed-project"
+    }
+  },
+  "components": [
+    {
+      "bom-ref": "pkg:npm/express@4.18.2",
+      "type": "library",
+      "name": "express",
+      "version": "4.18.2",
+      "purl": "pkg:npm/express@4.18.2"
+    },
+    {
+      "bom-ref": "pkg:npm/lodash@4.17.21",
+      "type": "library",
+      "name": "lodash",
+      "version": "4.17.21",
+      "purl": "pkg:npm/lodash@4.17.21"
+    },
+    {
+      "bom-ref": "pkg:pypi/requests@2.31.0",
+      "type": "library",
+      "name": "requests",
+      "version": "2.31.0",
+      "purl": "pkg:pypi/requests@2.31.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/flask@2.3.3",
+      "type": "library",
+      "name": "flask",
+      "version": "2.3.3",
+      "purl": "pkg:pypi/flask@2.3.3"
+    },
+    {
+      "bom-ref": "pkg:deb/debian/libc6@2.36-9?arch=amd64&distro=debian-12",
+      "type": "library",
+      "name": "libc6",
+      "version": "2.36-9",
+      "purl": "pkg:deb/debian/libc6@2.36-9?arch=amd64&distro=debian-12"
+    },
+    {
+      "bom-ref": "pkg:deb/debian/zlib1g@1:1.2.13.dfsg-1?arch=amd64&distro=debian-12",
+      "type": "library",
+      "name": "zlib1g",
+      "version": "1:1.2.13.dfsg-1",
+      "purl": "pkg:deb/debian/zlib1g@1:1.2.13.dfsg-1?arch=amd64&distro=debian-12"
+    }
+  ]
+}

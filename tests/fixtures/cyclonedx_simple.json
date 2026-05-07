@@ -1,0 +1,53 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:1c0a3b1f-1111-4d2c-9aaa-000000000001",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-05-07T12:00:00Z",
+    "tools": [
+      {
+        "vendor": "anchore",
+        "name": "syft",
+        "version": "1.18.0"
+      }
+    ],
+    "component": {
+      "bom-ref": "depscope-fixture-simple",
+      "type": "file",
+      "name": "/tmp/sample-npm-project"
+    }
+  },
+  "components": [
+    {
+      "bom-ref": "pkg:npm/express@4.18.2",
+      "type": "library",
+      "name": "express",
+      "version": "4.18.2",
+      "cpe": "cpe:2.3:a:expressjs:express:4.18.2:*:*:*:*:*:*:*",
+      "purl": "pkg:npm/express@4.18.2",
+      "properties": [
+        {
+          "name": "syft:package:foundBy",
+          "value": "javascript-package-cataloger"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:npm/lodash@4.17.21",
+      "type": "library",
+      "name": "lodash",
+      "version": "4.17.21",
+      "cpe": "cpe:2.3:a:lodash:lodash:4.17.21:*:*:*:*:*:*:*",
+      "purl": "pkg:npm/lodash@4.17.21"
+    },
+    {
+      "bom-ref": "pkg:npm/react@18.2.0",
+      "type": "library",
+      "name": "react",
+      "version": "18.2.0",
+      "cpe": "cpe:2.3:a:facebook:react:18.2.0:*:*:*:*:*:*:*",
+      "purl": "pkg:npm/react@18.2.0"
+    }
+  ]
+}
