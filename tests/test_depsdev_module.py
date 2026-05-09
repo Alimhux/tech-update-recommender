@@ -14,9 +14,9 @@ import aiohttp
 import pytest
 from aioresponses import aioresponses
 
-from depscope import depsdev_module
-from depscope.cache import _LATEST_KEY, Cache
-from depscope.depsdev_module import (
+from tech_update_recommender import depsdev_module
+from tech_update_recommender.cache import _LATEST_KEY, Cache
+from tech_update_recommender.depsdev_module import (
     DEPSDEV_BATCH_URL,
     DEPSDEV_PACKAGE_URL_TPL,
     DepsDevError,
@@ -27,8 +27,8 @@ from depscope.depsdev_module import (
     fetch_current_versions,
     fetch_latest_versions,
 )
-from depscope.models import PackageInfo
-from depscope.utils import (
+from tech_update_recommender.models import PackageInfo
+from tech_update_recommender.utils import (
     compute_semver_diff,
     normalize_pypi_name,
     url_encode_package_name,

@@ -26,15 +26,15 @@ from typing import Awaitable, Callable
 import aiohttp
 from packageurl import PackageURL
 
-from depscope.cache import _LATEST_KEY, Cache
-from depscope.models import (
+from tech_update_recommender.cache import _LATEST_KEY, Cache
+from tech_update_recommender.models import (
     Advisory,
     DependencyReport,
     FullReport,
     PackageInfo,
 )
-from depscope.syft_module import SUPPORTED_ECOSYSTEMS
-from depscope.utils import (
+from tech_update_recommender.syft_module import SUPPORTED_ECOSYSTEMS
+from tech_update_recommender.utils import (
     compute_semver_diff,
     normalize_pypi_name,
     url_encode_package_name,

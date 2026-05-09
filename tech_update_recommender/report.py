@@ -14,7 +14,7 @@ from typing import Any, Literal
 from rich.console import Console
 from rich.table import Table
 
-from depscope.models import DependencyReport, FullReport
+from tech_update_recommender.models import DependencyReport, FullReport
 
 # ---------------------------------------------------------------------------
 # Константы
@@ -241,7 +241,7 @@ def _render_markdown(
     """Markdown-отчёт со всеми секциями."""
 
     lines: list[str] = []
-    lines.append("# DepScope Report")
+    lines.append("# Tech Update Recommender Report")
     lines.append("")
     lines.append(f"**Project:** {report.project_path}")
     lines.append(f"**Scanned:** {report.scan_timestamp.isoformat()}")

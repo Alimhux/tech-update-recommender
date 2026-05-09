@@ -3,14 +3,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "depscope"
+name = "tech-update-recommender"
 version = "0.1.0"
 description = "Open-source CLI utility for local dependency analysis with AI-powered update recommendations."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
 authors = [
-    { name = "DepScope Contributors" },
+    { name = "Alimhux", email = "slavyan1011@gmail.com" },
 ]
 keywords = ["dependencies", "sbom", "syft", "deps.dev", "security", "cli"]
 classifiers = [
@@ -45,14 +45,14 @@ dev = [
 ]
 
 [project.scripts]
-depscope = "depscope.cli:main"
+tech-update-recommender = "tech_update_recommender.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/depscope/depscope"
-Issues = "https://github.com/depscope/depscope/issues"
+Homepage = "https://github.com/Alimhux/tech-update-recommender"
+Issues = "https://github.com/Alimhux/tech-update-recommender/issues"
 
 [tool.hatch.build.targets.wheel]
-packages = ["depscope"]
+packages = ["tech_update_recommender"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

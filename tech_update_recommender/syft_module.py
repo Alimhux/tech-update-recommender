@@ -8,7 +8,7 @@
    экосистемы deps.dev.
 
 Это единственный модуль, общающийся с syft. Дальше pipeline идёт уже
-через `PackageInfo` (см. `depscope.models`).
+через `PackageInfo` (см. `tech_update_recommender.models`).
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from pathlib import Path
 
 from packageurl import PackageURL
 
-from depscope.models import PackageInfo
+from tech_update_recommender.models import PackageInfo
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +113,7 @@ def run_syft(project_path: str, syft_binary: str) -> Path:
         mode="wb",
         delete=False,
         suffix=".json",
-        prefix="depscope-syft-",
+        prefix="tur-syft-",
     )
     tmp_path = Path(tmp.name)
 

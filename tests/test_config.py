@@ -1,4 +1,4 @@
-"""Тесты загрузки конфигурации DepScope."""
+"""Тесты загрузки конфигурации Tech Update Recommender."""
 
 from __future__ import annotations
 
@@ -7,13 +7,13 @@ from pathlib import Path
 import pytest
 from pydantic import SecretStr
 
-from depscope.config import Config, load_config
+from tech_update_recommender.config import Config, load_config
 
 # Изоляция от пользовательских env vars LLM
 LLM_ENV_VARS = (
-    "DEPSCOPE_LLM_MODEL",
-    "DEPSCOPE_LLM_API_KEY",
-    "DEPSCOPE_SYFT_PATH",
+    "TUR_LLM_MODEL",
+    "TUR_LLM_API_KEY",
+    "TUR_SYFT_PATH",
     "GEMINI_API_KEY",
     "OPENAI_API_KEY",
     "ANTHROPIC_API_KEY",
@@ -39,7 +39,7 @@ def test_defaults_no_yaml(tmp_path: Path) -> None:
 
 
 def test_yaml_overrides_defaults(tmp_path: Path) -> None:
-    yaml_path = tmp_path / "depscope.yaml"
+    yaml_path = tmp_path / "tech-update-recommender.yaml"
     yaml_path.write_text(
         """
 llm:
@@ -65,7 +65,7 @@ syft:
 
 
 def test_env_overrides_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    yaml_path = tmp_path / "depscope.yaml"
+    yaml_path = tmp_path / "tech-update-recommender.yaml"
     yaml_path.write_text(
         """
 llm:
@@ -74,15 +74,15 @@ llm:
 """,
         encoding="utf-8",
     )
-    monkeypatch.setenv("DEPSCOPE_LLM_MODEL", "from-env")
-    monkeypatch.setenv("DEPSCOPE_LLM_API_KEY", "env-key")
+    monkeypatch.setenv("TUR_LLM_MODEL", "from-env")
+    monkeypatch.setenv("TUR_LLM_API_KEY", "env-key")
     cfg = load_config(cli_overrides={}, config_path=yaml_path)
     assert cfg.llm.model == "from-env"
     assert cfg.llm.api_key.get_secret_value() == "env-key"
 
 
 def test_cli_overrides_env_and_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    yaml_path = tmp_path / "depscope.yaml"
+    yaml_path = tmp_path / "tech-update-recommender.yaml"
     yaml_path.write_text(
         """
 llm:
@@ -92,8 +92,8 @@ syft:
 """,
         encoding="utf-8",
     )
-    monkeypatch.setenv("DEPSCOPE_LLM_MODEL", "from-env")
-    monkeypatch.setenv("DEPSCOPE_SYFT_PATH", "/env/syft")
+    monkeypatch.setenv("TUR_LLM_MODEL", "from-env")
+    monkeypatch.setenv("TUR_SYFT_PATH", "/env/syft")
 
     cli_overrides = {
         "llm_model": "from-cli",
@@ -143,7 +143,7 @@ def test_malformed_yaml_falls_back_to_defaults(tmp_path: Path) -> None:
 
 def test_cli_none_does_not_override_yaml(tmp_path: Path) -> None:
     """Явное CLI значение None не должно сбрасывать значение из YAML."""
-    yaml_path = tmp_path / "depscope.yaml"
+    yaml_path = tmp_path / "tech-update-recommender.yaml"
     yaml_path.write_text(
         'llm:\n  model: "gemini/gemini-2.0-flash"\n',
         encoding="utf-8",

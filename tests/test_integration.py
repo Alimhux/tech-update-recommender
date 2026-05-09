@@ -14,8 +14,8 @@ from unittest.mock import patch
 import pytest
 from click.testing import CliRunner
 
-from depscope.cli import cli
-from depscope.models import (
+from tech_update_recommender.cli import cli
+from tech_update_recommender.models import (
     Advisory,
     DependencyReport,
     FullReport,
@@ -111,12 +111,15 @@ def test_full_pipeline_with_mocks(
 
     with (
         patch(
-            "depscope.cli.scan_project",
+            "tech_update_recommender.cli.scan_project",
             return_value=mock_packages,
         ) as scan_mock,
-        patch("depscope.cli.build_report", side_effect=fake_build_report) as build_mock,
         patch(
-            "depscope.cli.generate_advice",
+            "tech_update_recommender.cli.build_report",
+            side_effect=fake_build_report,
+        ) as build_mock,
+        patch(
+            "tech_update_recommender.cli.generate_advice",
             return_value="# Test advice",
         ) as advice_mock,
     ):
@@ -135,7 +138,7 @@ def test_full_pipeline_with_mocks(
         )
 
     assert result.exit_code == 0, result.output
-    assert "# DepScope Report" in result.output
+    assert "# Tech Update Recommender Report" in result.output
     # advice должен попасть в вывод (через render_report)
     assert "# Test advice" in result.output
     # дисклеймер должен присутствовать с именем модели
@@ -163,9 +166,9 @@ def test_mode_report_no_llm_call(
         raise AssertionError("generate_advice should not be called in --mode=report")
 
     with (
-        patch("depscope.cli.scan_project", return_value=mock_packages),
-        patch("depscope.cli.build_report", side_effect=fake_build_report),
-        patch("depscope.cli.generate_advice", side_effect=boom) as advice_mock,
+        patch("tech_update_recommender.cli.scan_project", return_value=mock_packages),
+        patch("tech_update_recommender.cli.build_report", side_effect=fake_build_report),
+        patch("tech_update_recommender.cli.generate_advice", side_effect=boom) as advice_mock,
     ):
         result = runner.invoke(
             cli,
@@ -190,8 +193,8 @@ def test_only_outdated_end_to_end(
         return mock_full_report
 
     with (
-        patch("depscope.cli.scan_project", return_value=mock_packages),
-        patch("depscope.cli.build_report", side_effect=fake_build_report),
+        patch("tech_update_recommender.cli.scan_project", return_value=mock_packages),
+        patch("tech_update_recommender.cli.build_report", side_effect=fake_build_report),
     ):
         result = runner.invoke(
             cli,
@@ -227,8 +230,8 @@ def test_save_to_file(
         return mock_full_report
 
     with (
-        patch("depscope.cli.scan_project", return_value=mock_packages),
-        patch("depscope.cli.build_report", side_effect=fake_build_report),
+        patch("tech_update_recommender.cli.scan_project", return_value=mock_packages),
+        patch("tech_update_recommender.cli.build_report", side_effect=fake_build_report),
     ):
         result = runner.invoke(
             cli,
@@ -260,11 +263,11 @@ def test_advice_mode_without_model_raises_config_error(tmp_path: Path) -> None:
 
     # Нужно подменить env vars и yaml — иначе пользовательский конфиг
     # подцепится. Patch'им load_config, чтобы отдавать пустой Config.
-    from depscope.config import Config
+    from tech_update_recommender.config import Config
 
     with (
-        patch("depscope.cli.load_config", return_value=Config()),
-        patch("depscope.cli.scan_project") as scan_mock,
+        patch("tech_update_recommender.cli.load_config", return_value=Config()),
+        patch("tech_update_recommender.cli.scan_project") as scan_mock,
     ):
         result = runner.invoke(
             cli,

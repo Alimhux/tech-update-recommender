@@ -1,6 +1,6 @@
-# DepScope
+# Tech Update Recommender
 
-DepScope — open-source CLI-утилита для локального анализа зависимостей проекта.
+Tech Update Recommender — open-source CLI-утилита для локального анализа зависимостей проекта.
 Она находит application-level зависимости через [Syft](https://github.com/anchore/syft),
 проверяет их версии и известные уязвимости через [deps.dev](https://deps.dev),
 и опционально генерирует AI-рекомендации по обновлению через
@@ -16,25 +16,25 @@ DepScope — open-source CLI-утилита для локального анал
 
 ## Установка
 
-DepScope требует Python 3.11+.
+Tech Update Recommender требует Python 3.11+.
 
 ```bash
+# Из PyPI:
+pip install tech-update-recommender[llm]
+# или через pipx:
+pipx install "tech-update-recommender[llm]"
+
 # Из исходников (для разработки):
 pip install -e ".[llm]"
-
-# Когда пакет будет опубликован на PyPI:
-pip install depscope[llm]
-# или через pipx:
-pipx install "depscope[llm]"
 ```
 
-Группа `[llm]` ставит `litellm`. Без неё DepScope работает в режимах
+Группа `[llm]` ставит `litellm`. Без неё Tech Update Recommender работает в режимах
 `report` (без LLM) и просто возвращает понятную ошибку, если запросить
 `advice`/`full`.
 
 ### Установка Syft
 
-DepScope не пытается тянуть Syft в зависимостях — этот инструмент удобнее
+Tech Update Recommender не пытается тянуть Syft в зависимостях — этот инструмент удобнее
 ставить системно.
 
 ```bash
@@ -46,20 +46,20 @@ curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -
 ```
 
 Если syft установлен в нестандартное место — передайте путь через
-`--syft-path` или поле `syft.path` в `~/.depscope.yaml`.
+`--syft-path` или поле `syft.path` в `~/.tech-update-recommender.yaml`.
 
 ## Quickstart
 
 ```bash
 # 1. Простой отчёт по фактам (без LLM):
-depscope scan ./my-project
+tech-update-recommender scan ./my-project
 
 # 2. Полный отчёт с AI-рекомендациями:
-depscope scan ./my-project --mode full \
+tech-update-recommender scan ./my-project --mode full \
     --llm-model gemini/gemini-2.0-flash
 
 # 3. JSON в файл:
-depscope scan ./my-project --output json --save out.json
+tech-update-recommender scan ./my-project --output json --save out.json
 ```
 
 ## Режимы работы
@@ -71,7 +71,7 @@ depscope scan ./my-project --output json --save out.json
 | `full`   | факты + AI-рекомендации.                                             |
 
 Режимы `advice` и `full` требуют указать LLM-модель (через CLI-аргумент,
-env var или конфиг). Без модели DepScope сообщит ошибку конфигурации
+env var или конфиг). Без модели Tech Update Recommender сообщит ошибку конфигурации
 (`exit code 5`) и подскажет, что делать.
 
 Флаг `--no-llm` принудительно понижает режим до `report` — удобно,
@@ -80,10 +80,10 @@ env var или конфиг). Без модели DepScope сообщит оши
 
 ## Конфигурационный файл
 
-Путь по умолчанию: `~/.depscope.yaml`. Файл опционален — при отсутствии
+Путь по умолчанию: `~/.tech-update-recommender.yaml`. Файл опционален — при отсутствии
 используются значения по умолчанию.
 
-Пример полной структуры см. в `docs/depscope.yaml.example`. Минимальный
+Пример полной структуры см. в `docs/tech-update-recommender.yaml.example`. Минимальный
 вариант:
 
 ```yaml
@@ -94,29 +94,29 @@ llm:
 cache:
   enabled: true
   ttl_seconds: 3600
-  path: "~/.cache/depscope/"
+  path: "~/.cache/tech-update-recommender/"
 ```
 
 API-ключи лучше держать в env vars, а не в файле. Если всё-таки храните
-в файле — `chmod 600 ~/.depscope.yaml`.
+в файле — `chmod 600 ~/.tech-update-recommender.yaml`.
 
 ## Переменные окружения
 
 | Переменная              | Что задаёт                                              |
 |-------------------------|---------------------------------------------------------|
-| `DEPSCOPE_LLM_MODEL`    | Имя LLM-модели (как `--llm-model`).                     |
-| `DEPSCOPE_LLM_API_KEY`  | Универсальный API-ключ DepScope.                        |
-| `ANTHROPIC_API_KEY`     | Используется, если `DEPSCOPE_LLM_API_KEY` не задан.     |
+| `TUR_LLM_MODEL`        | Имя LLM-модели (как `--llm-model`).                     |
+| `TUR_LLM_API_KEY`      | Универсальный API-ключ.                                 |
+| `ANTHROPIC_API_KEY`     | Используется, если `TUR_LLM_API_KEY` не задан.          |
 | `OPENAI_API_KEY`        | То же самое.                                            |
 | `GEMINI_API_KEY`        | То же самое.                                            |
-| `DEPSCOPE_SYFT_PATH`    | Путь к бинарнику syft (как `--syft-path`).              |
+| `TUR_SYFT_PATH`         | Путь к бинарнику syft (как `--syft-path`).              |
 
 Каскад приоритетов значений (от высшего к низшему):
-CLI > env vars > `~/.depscope.yaml` > дефолты.
+CLI > env vars > `~/.tech-update-recommender.yaml` > дефолты.
 
 ## Поддерживаемые экосистемы
 
-Экосистемы, для которых DepScope умеет проверять версии и advisories
+Экосистемы, для которых Tech Update Recommender умеет проверять версии и advisories
 через deps.dev:
 
 - `npm`
@@ -129,7 +129,7 @@ CLI > env vars > `~/.depscope.yaml` > дефолты.
 
 Системные пакеты (`deb`, `apk`, `rpm` и т.п.), найденные Syft, не
 проверяются — они показываются отдельной секцией «Не проверено через
-deps.dev» (это ограничение API deps.dev, а не DepScope).
+deps.dev» (это ограничение API deps.dev, а не Tech Update Recommender).
 
 ## Известные ограничения
 
@@ -139,12 +139,12 @@ deps.dev» (это ограничение API deps.dev, а не DepScope).
 - **deps.dev не знает системные пакеты.** Контейнерные пакеты (deb / apk
   / rpm) выводятся отдельной секцией без проверки на устаревание/CVE.
 - **deps.dev v3alpha может меняться.** Batch endpoint используется для
-  получения advisories текущих версий; в случае поломки API — DepScope
+  получения advisories текущих версий; в случае поломки API — Tech Update Recommender
   выдаст понятную ошибку и не упадёт с traceback.
 - **LLM не гарантирует корректность рекомендаций.** Это всегда advisory:
   проверяйте совместимость и тестируйте обновления.
 - **Нормализация имён пакетов.** PyPI нормализует имена
-  (`Flask-Babel` → `flask-babel`). DepScope делает это на своей стороне
+  (`Flask-Babel` → `flask-babel`). Tech Update Recommender делает это на своей стороне
   для запросов и кеша.
 
 ## Коды возврата

@@ -1,23 +1,23 @@
 # CLAUDE.md — ориентир для агентов
 
-Краткий справочник по структуре DepScope, контрактам между модулями и
+Краткий справочник по структуре Tech Update Recommender, контрактам между модулями и
 правилам, которым нужно следовать при доработке.
 
 ## Карта модулей
 
 | Файл | Что делает |
 |------|------------|
-| `depscope/__init__.py`        | Экспортирует `__version__`. |
-| `depscope/__main__.py`        | `python -m depscope` → `cli.main`. |
-| `depscope/cli.py`             | Click-команда `scan`, склейка pipeline, обработка ошибок верхнего уровня. |
-| `depscope/config.py`          | Pydantic-конфиг + каскад «CLI > env > yaml > defaults», `ConfigError`. |
-| `depscope/cache.py`           | SQLite-кеш `(system, name, version) → JSON` с TTL. |
-| `depscope/models.py`          | Pydantic-модели контрактов: `PackageInfo`, `DependencyReport`, `FullReport`, `LLMInput`, `Advisory`. |
-| `depscope/syft_module.py`     | Запуск syft, парсинг CycloneDX, фильтр по `SUPPORTED_ECOSYSTEMS`, `SyftError`. |
-| `depscope/depsdev_module.py`  | Async HTTP к deps.dev (batch + GetPackage), `build_report`, `DepsDevError`. |
-| `depscope/llm_module.py`      | Сбор контекста (tree + dep-файлы), промпт, `litellm.completion`, `LLMError`. |
-| `depscope/report.py`          | Рендер `FullReport` в `table` / `json` / `markdown`. |
-| `depscope/utils.py`           | semver-сравнение, нормализация PyPI-имён, URL-кодирование. |
+| `tech_update_recommender/__init__.py`        | Экспортирует `__version__`. |
+| `tech_update_recommender/__main__.py`        | `python -m tech_update_recommender` → `cli.main`. |
+| `tech_update_recommender/cli.py`             | Click-команда `scan`, склейка pipeline, обработка ошибок верхнего уровня. |
+| `tech_update_recommender/config.py`          | Pydantic-конфиг + каскад «CLI > env > yaml > defaults», `ConfigError`. |
+| `tech_update_recommender/cache.py`           | SQLite-кеш `(system, name, version) → JSON` с TTL. |
+| `tech_update_recommender/models.py`          | Pydantic-модели контрактов: `PackageInfo`, `DependencyReport`, `FullReport`, `LLMInput`, `Advisory`. |
+| `tech_update_recommender/syft_module.py`     | Запуск syft, парсинг CycloneDX, фильтр по `SUPPORTED_ECOSYSTEMS`, `SyftError`. |
+| `tech_update_recommender/depsdev_module.py`  | Async HTTP к deps.dev (batch + GetPackage), `build_report`, `DepsDevError`. |
+| `tech_update_recommender/llm_module.py`      | Сбор контекста (tree + dep-файлы), промпт, `litellm.completion`, `LLMError`. |
+| `tech_update_recommender/report.py`          | Рендер `FullReport` в `table` / `json` / `markdown`. |
+| `tech_update_recommender/utils.py`           | semver-сравнение, нормализация PyPI-имён, URL-кодирование. |
 
 ## Контракты между модулями (одной строкой)
 
@@ -43,7 +43,7 @@ twine check dist/*         # метаданные
 
 - Не печатать API-ключи в логах. `SecretStr` уже маскирует — не вытаскивайте
   значение в логгер. В `generate_advice` ключ не логируется (см. блок 5).
-- Не превращать pipeline в agentic / tool-using. DepScope делает один
+- Не превращать pipeline в agentic / tool-using. Tech Update Recommender делает один
   LLM-вызов с собранным заранее контекстом — и всё. Без циклов «LLM зовёт
   инструменты».
 - Не делать реальные HTTP/syft-вызовы в тестах. Используйте `aioresponses`
@@ -57,5 +57,5 @@ twine check dist/*         # метаданные
 
 ## Версионирование
 
-Версия в `depscope/__init__.py` и `pyproject.toml` должна совпадать.
+Версия в `tech_update_recommender/__init__.py` и `pyproject.toml` должна совпадать.
 Текущая релизная — `0.1.0`.

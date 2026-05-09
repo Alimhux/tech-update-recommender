@@ -1,9 +1,9 @@
-"""Конфигурация DepScope.
+"""Конфигурация Tech Update Recommender.
 
 Каскад источников значений (от высшего приоритета к низшему):
     1. CLI аргументы (cli_overrides)
     2. Переменные окружения
-    3. Файл ~/.depscope.yaml
+    3. Файл ~/.tech-update-recommender.yaml
     4. Дефолты, заданные в моделях ниже
 
 API-ключи всегда хранятся в pydantic.SecretStr и маскируются в выводе.
@@ -22,11 +22,11 @@ from pydantic import BaseModel, Field, SecretStr
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_CONFIG_PATH = Path("~/.depscope.yaml").expanduser()
+DEFAULT_CONFIG_PATH = Path("~/.tech-update-recommender.yaml").expanduser()
 
 
 class ConfigError(Exception):
-    """Базовое исключение конфигурационных проблем DepScope."""
+    """Базовое исключение конфигурационных проблем Tech Update Recommender."""
 
 
 class LLMConfig(BaseModel):
@@ -42,7 +42,7 @@ class CacheConfig(BaseModel):
 
     enabled: bool = True
     ttl_seconds: int = 3600
-    path: str = "~/.cache/depscope/"
+    path: str = "~/.cache/tech-update-recommender/"
 
 
 class SyftConfig(BaseModel):
@@ -52,7 +52,7 @@ class SyftConfig(BaseModel):
 
 
 class Config(BaseModel):
-    """Конечная сложенная конфигурация DepScope."""
+    """Конечная сложенная конфигурация Tech Update Recommender."""
 
     llm: LLMConfig = Field(default_factory=LLMConfig)
     cache: CacheConfig = Field(default_factory=CacheConfig)
@@ -79,19 +79,19 @@ def _env_overrides() -> dict[str, Any]:
     """Собрать значения из переменных окружения.
 
     Поддерживаются:
-      - DEPSCOPE_LLM_MODEL
-      - DEPSCOPE_LLM_API_KEY (общий ключ)
+      - TUR_LLM_MODEL
+      - TUR_LLM_API_KEY (общий ключ)
       - GEMINI_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY (стандартные)
-      - DEPSCOPE_SYFT_PATH
+      - TUR_SYFT_PATH
     """
     env: dict[str, Any] = {}
     llm: dict[str, Any] = {}
 
-    if model := os.environ.get("DEPSCOPE_LLM_MODEL"):
+    if model := os.environ.get("TUR_LLM_MODEL"):
         llm["model"] = model
 
     api_key = (
-        os.environ.get("DEPSCOPE_LLM_API_KEY")
+        os.environ.get("TUR_LLM_API_KEY")
         or os.environ.get("GEMINI_API_KEY")
         or os.environ.get("OPENAI_API_KEY")
         or os.environ.get("ANTHROPIC_API_KEY")
@@ -102,7 +102,7 @@ def _env_overrides() -> dict[str, Any]:
     if llm:
         env["llm"] = llm
 
-    if syft_path := os.environ.get("DEPSCOPE_SYFT_PATH"):
+    if syft_path := os.environ.get("TUR_SYFT_PATH"):
         env["syft"] = {"path": syft_path}
 
     return env
@@ -153,7 +153,7 @@ def load_config(
     """Загрузить конфигурацию с каскадом источников.
 
     Порядок (последний побеждает):
-        defaults < ~/.depscope.yaml < env vars < cli_overrides
+        defaults < ~/.tech-update-recommender.yaml < env vars < cli_overrides
     """
     cli_overrides = cli_overrides or {}
     path = config_path if config_path is not None else DEFAULT_CONFIG_PATH

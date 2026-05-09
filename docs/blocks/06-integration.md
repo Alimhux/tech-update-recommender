@@ -12,7 +12,7 @@ README, финальные интеграционные тесты и подго
 
 ## Задачи
 
-### 6.1 Финальный CLI pipeline (depscope/cli.py)
+### 6.1 Финальный CLI pipeline (tech_update_recommender/cli.py)
 
 Реализовать команду `scan` целиком:
 
@@ -21,7 +21,7 @@ README, финальные интеграционные тесты и подго
 @click.argument("path")
 # ... все опции ...
 def scan(path, output, mode, only_outdated, save, llm_model, ...):
-    # 1. Загрузить конфиг (CLI > env > ~/.depscope.yaml > defaults)
+    # 1. Загрузить конфиг (CLI > env > ~/.tech-update-recommender.yaml > defaults)
     config = load_config(cli_overrides)
 
     # 2. Включить логирование
@@ -70,8 +70,8 @@ def scan(path, output, mode, only_outdated, save, llm_model, ...):
 
 ### 6.3 Конфигурационный файл
 
-- Создать пример `docs/depscope.yaml.example` (структура из PLAN.md).
-- Реализовать в `depscope/config.py` загрузку из `~/.depscope.yaml`,
+- Создать пример `docs/tech-update-recommender.yaml.example` (структура из PLAN.md).
+- Реализовать в `tech_update_recommender/config.py` загрузку из `~/.tech-update-recommender.yaml`,
   если файл существует.
 - Документировать в README, как создать конфиг.
 
@@ -79,17 +79,17 @@ def scan(path, output, mode, only_outdated, save, llm_model, ...):
 
 Минимальный, но полноценный:
 
-- Что делает DepScope (1 абзац).
+- Что делает Tech Update Recommender (1 абзац).
 - Установка: pip / pipx, опциональные группы (`[llm]`).
 - Установка syft (ссылка на anchore/syft, brew, curl-скрипт).
 - Quickstart:
   ```
-  depscope scan ./my-project
-  depscope scan ./my-project --mode full --llm-model gemini/gemini-2.0-flash
+  tech-update-recommender scan ./my-project
+  tech-update-recommender scan ./my-project --mode full --llm-model gemini/gemini-2.0-flash
   ```
 - Описание режимов (`report`, `advice`, `full`).
 - Конфиг-файл — пример и где лежит.
-- Env vars: `DEPSCOPE_LLM_API_KEY`, `ANTHROPIC_API_KEY`, …
+- Env vars: `TUR_LLM_API_KEY`, `ANTHROPIC_API_KEY`, …
 - Поддерживаемые экосистемы — список.
 - Известные ограничения (из PLAN.md, секция «Нюансы»).
 - Лицензия: MIT.
@@ -130,16 +130,16 @@ def scan(path, output, mode, only_outdated, save, llm_model, ...):
 
 ### 6.9 Сборка пакета
 
-- `python -m build` → `dist/depscope-0.1.0-py3-none-any.whl` + sdist.
+- `python -m build` → `dist/tech_update_recommender-0.1.0-py3-none-any.whl` + sdist.
 - `twine check dist/*` — без ошибок.
 - Публикацию на PyPI оставляем за пользователем (не автоматизируем
   в рамках курсовой).
 
 ## Критерии приёмки
 
-- [ ] `depscope scan <реальный_проект>` выводит корректный отчёт
+- [ ] `tech-update-recommender scan <реальный_проект>` выводит корректный отчёт
       в режимах `report`, `advice`, `full`.
-- [ ] `depscope scan ... --output json --save out.json` создаёт
+- [ ] `tech-update-recommender scan ... --output json --save out.json` создаёт
       валидный JSON-файл.
 - [ ] При ошибке (нет syft, нет API-ключа) — понятное сообщение, не traceback.
 - [ ] Все интеграционные тесты зелёные.
@@ -154,7 +154,7 @@ def scan(path, output, mode, only_outdated, save, llm_model, ...):
 - Прогресс-бары не должны портить вывод JSON в stdout — печатать прогресс
   в stderr, результат в stdout.
 - Кеш SQLite: при первом запуске файл может не существовать — создаём
-  директорию `~/.cache/depscope/` через `mkdir parents=True`.
+  директорию `~/.cache/tech_update_recommender/` через `mkdir parents=True`.
 
 ## Что НЕ делаем в этом блоке
 

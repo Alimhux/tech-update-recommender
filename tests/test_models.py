@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import ValidationError
 
-from depscope.models import (
+from tech_update_recommender.models import (
     Advisory,
     DependencyReport,
     FullReport,

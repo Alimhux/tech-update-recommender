@@ -49,7 +49,7 @@ htmlcov/
 !.env.example
 
 # Project-specific
-*.depscope-cache/
+*.tech-update-recommender-cache/
 
 # OS
 .DS_Store

@@ -4,7 +4,7 @@
 
 Подготовить базовую инфраструктуру проекта: упаковку, структуру директорий,
 контракты данных (Pydantic-модели) и CLI-каркас с заглушками. После этого
-блока проект должен устанавливаться (`pip install -e .`), команда `depscope`
+блока проект должен устанавливаться (`pip install -e .`), команда `tech-update-recommender`
 должна запускаться, а импорт всех модулей должен проходить без ошибок.
 
 ## Пререквизиты
@@ -18,7 +18,7 @@
 ### 1.1 pyproject.toml
 
 - Создать `pyproject.toml` со сборкой через `setuptools` или `hatchling`.
-- Заполнить метаданные: `name = "depscope"`, `version = "0.1.0"`, license MIT,
+- Заполнить метаданные: `name = "tech-update-recommender"`, `version = "0.1.0"`, license MIT,
   python `>=3.11`.
 - Зависимости (runtime):
   - `click`
@@ -36,7 +36,7 @@
 - Зарегистрировать entry-point:
   ```
   [project.scripts]
-  depscope = "depscope.cli:main"
+  depscope = "tech_update_recommender.cli:main"
   ```
 
 ### 1.2 Структура директорий
@@ -44,7 +44,7 @@
 Создать следующее дерево (пустые `.py` файлы или с минимальными заглушками):
 
 ```
-depscope/
+tech_update_recommender/
 ├── __init__.py        # Версия пакета: __version__ = "0.1.0"
 ├── cli.py
 ├── config.py
@@ -65,7 +65,7 @@ tests/
 docs/
 ```
 
-### 1.3 Pydantic-модели (depscope/models.py)
+### 1.3 Pydantic-модели (tech_update_recommender/models.py)
 
 Реализовать ровно те модели, что указаны в PLAN.md, без отсебятины:
 
@@ -80,27 +80,27 @@ docs/
 - Все модели наследуются от `pydantic.BaseModel`.
 - Опциональные поля помечены как `Optional[...] = None` (или `| None = None`).
 - Списки имеют дефолт `Field(default_factory=list)`.
-- Модели должны быть импортируемы: `from depscope.models import PackageInfo, ...`.
+- Модели должны быть импортируемы: `from tech_update_recommender.models import PackageInfo, ...`.
 
-### 1.4 Конфигурация (depscope/config.py)
+### 1.4 Конфигурация (tech_update_recommender/config.py)
 
 - Класс `Config` (Pydantic-модель) с дефолтами.
 - Функция `load_config(cli_overrides: dict) -> Config` со слиянием:
-  CLI args → env vars → `~/.depscope.yaml` → defaults.
+  CLI args → env vars → `~/.tech-update-recommender.yaml` → defaults.
 - На этом этапе достаточно реализовать загрузку YAML и слияние с defaults.
   Реальное использование появится позже.
 - API-ключи никогда не логируются (заложить в `__repr__`/`model_dump` маску).
 
-### 1.5 CLI-каркас (depscope/cli.py)
+### 1.5 CLI-каркас (tech_update_recommender/cli.py)
 
 - Использовать `click`.
-- Команда `depscope scan <path>` со всеми опциями из PLAN.md
+- Команда `tech-update-recommender scan <path>` со всеми опциями из PLAN.md
   (`--output`, `--mode`, `--only-outdated`, `--save`, `--llm-model`,
   `--llm-api-key`, `--no-llm`, `--syft-path`, `--verbose`).
 - На этом этапе обработчик команды печатает «not implemented yet»
   и выходит с кодом 0. Реальная склейка — в блоке 6.
 - `def main()` — entry point.
-- `--version` — печатает версию из `depscope.__version__`.
+- `--version` — печатает версию из `tech_update_recommender.__version__`.
 
 ### 1.6 Логирование
 
@@ -111,9 +111,9 @@ docs/
 ## Критерии приёмки
 
 - [ ] `pip install -e ".[llm,dev]"` проходит без ошибок.
-- [ ] `depscope --version` печатает корректную версию.
-- [ ] `depscope scan .` запускается и выводит заглушку.
-- [ ] `python -c "from depscope.models import FullReport"` работает.
+- [ ] `tech-update-recommender --version` печатает корректную версию.
+- [ ] `tech-update-recommender scan .` запускается и выводит заглушку.
+- [ ] `python -c "from tech_update_recommender.models import FullReport"` работает.
 - [ ] `pytest -q` проходит (даже если тестов пока 0).
 
 ## Тесты блока
@@ -127,7 +127,7 @@ docs/
 - Не тащить в скелет логику syft/deps.dev/LLM — только контракты и заглушки.
 - Версии Pydantic 1 vs 2 несовместимы — фиксируем `pydantic >= 2`.
 - `click` группы и команды: `scan` сделать командой, чтобы потом легко
-  добавить, например, `depscope cache clear`.
+  добавить, например, `tech-update-recommender cache clear`.
 
 ## Что НЕ делаем в этом блоке
 

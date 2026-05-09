@@ -1,4 +1,4 @@
-# DepScope — Чеклист реализации
+# Tech Update Recommender — Чеклист реализации
 
 Заполняется по мере работы. Подробности по каждому блоку — в `docs/blocks/`.
 
@@ -10,8 +10,8 @@
 > Подробности: [docs/blocks/01-skeleton.md](docs/blocks/01-skeleton.md)
 
 - [x] `pyproject.toml` создан и валиден
-- [x] Структура директорий создана (`depscope/`, `tests/`, `docs/`, `tests/fixtures/`)
-- [x] `depscope/__init__.py` с `__version__`
+- [x] Структура директорий создана (`tech_update_recommender/`, `tests/`, `docs/`, `tests/fixtures/`)
+- [x] `tech_update_recommender/__init__.py` с `__version__`
 - [x] `models.py`: `PackageInfo`, `Advisory`, `DependencyReport`, `FullReport`, `LLMInput`
 - [x] `config.py`: `Config` + `load_config()` с каскадом дефолтов
 - [x] `cli.py`: `click`-команда `scan` со всеми опциями (заглушки)
@@ -115,8 +115,8 @@
 - [x] Прогресс-бары через `rich.progress` (в stderr)
 - [x] Обработка ошибок верхнего уровня в `main()`, корректные exit codes
 - [x] Ошибка при `--mode advice/full` без указанной модели
-- [x] Конфиг `~/.depscope.yaml` загружается, если есть
-- [x] `docs/depscope.yaml.example` создан
+- [x] Конфиг `~/.tech-update-recommender.yaml` загружается, если есть
+- [x] `docs/tech-update-recommender.yaml.example` создан
 - [x] `README.md` написан (установка, quickstart, режимы, конфиг, env vars, ограничения)
 - [x] `CLAUDE.md` создан (карта модулей, контракты, тесты)
 - [x] `LICENSE` (MIT) в корне

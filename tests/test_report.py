@@ -7,13 +7,13 @@ from datetime import datetime, timezone
 
 import pytest
 
-from depscope.models import (
+from tech_update_recommender.models import (
     Advisory,
     DependencyReport,
     FullReport,
     PackageInfo,
 )
-from depscope.report import LLM_DISCLAIMER_TEMPLATE, render_report
+from tech_update_recommender.report import LLM_DISCLAIMER_TEMPLATE, render_report
 
 # ---------------------------------------------------------------------------
 # Фикстуры
@@ -244,7 +244,7 @@ def test_markdown_metadata_block(rich_full_report: FullReport) -> None:
     """Project / Scanned метаданные присутствуют."""
 
     out = render_report(rich_full_report, fmt="markdown")
-    assert "# DepScope Report" in out
+    assert "# Tech Update Recommender Report" in out
     assert "**Project:** /tmp/sample-project" in out
     assert "**Scanned:**" in out
     assert "2026-05-07" in out

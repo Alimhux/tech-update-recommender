@@ -14,7 +14,7 @@ Claude, GPT, Ollama и т.д.) единым интерфейсом.
 
 ## Задачи
 
-### 5.1 Сбор контекста (depscope/llm_module.py)
+### 5.1 Сбор контекста (tech_update_recommender/llm_module.py)
 
 #### 5.1.1 Дерево проекта
 
@@ -123,9 +123,9 @@ def generate_advice(
 ```
 
 - Импорт `litellm` ленивый (внутри функции), чтобы при отсутствии
-  зависимости не падало при `import depscope.llm_module`.
+  зависимости не падало при `import tech_update_recommender.llm_module`.
 - Если `litellm` не установлен — `LLMNotAvailableError`
-  с подсказкой `pip install depscope[llm]`.
+  с подсказкой `pip install tech-update-recommender[llm]`.
 - Передача `api_key`: через `litellm.completion(api_key=...)`.
 - Возвращаем `response.choices[0].message.content`.
 - Логирование: модель, кол-во токенов промпта, время ответа.
@@ -142,10 +142,10 @@ def generate_advice(
 
 - Если `--mode advice` или `--mode full`, но модель не указана —
   CLI кидает `ConfigError` с инструкцией: укажите `--llm-model`,
-  выставьте env var или `~/.depscope.yaml`.
-- API-ключ: `--llm-api-key` > `DEPSCOPE_LLM_API_KEY` >
+  выставьте env var или `~/.tech-update-recommender.yaml`.
+- API-ключ: `--llm-api-key` > `TUR_LLM_API_KEY` >
   стандартные (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`)
-  > `~/.depscope.yaml`.
+  > `~/.tech-update-recommender.yaml`.
 
 ## Критерии приёмки
 

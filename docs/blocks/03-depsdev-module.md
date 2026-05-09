@@ -54,7 +54,7 @@ deps.dev API: latest-версии, advisories, semver-разница. Резул
 
 ### 3.4 Сравнение версий и semver_diff
 
-- В `depscope/utils.py` функция `compute_semver_diff(current, latest) -> str | None`:
+- В `tech_update_recommender/utils.py` функция `compute_semver_diff(current, latest) -> str | None`:
   - `"major"` если major увеличился
   - `"minor"` если minor
   - `"patch"` если patch
@@ -65,11 +65,11 @@ deps.dev API: latest-версии, advisories, semver-разница. Резул
 
 ### 3.5 Кеш
 
-- Класс `Cache` в отдельном файле `depscope/cache.py`.
+- Класс `Cache` в отдельном файле `tech_update_recommender/cache.py`.
 - Бэкенд: SQLite (`stdlib sqlite3`) с таблицей
   `(system, name, version, payload, fetched_at)`.
 - TTL — из конфига (`cache.ttl_seconds`, default 3600).
-- Путь — из конфига (`~/.cache/depscope/cache.db`).
+- Путь — из конфига (`~/.cache/tech_update_recommender/cache.db`).
 - API:
   - `get(system, name, version) -> dict | None`
   - `set(system, name, version, payload: dict) -> None`

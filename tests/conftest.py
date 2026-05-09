@@ -1,4 +1,4 @@
-"""Общие фикстуры для тестов DepScope."""
+"""Общие фикстуры для тестов Tech Update Recommender."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from depscope.models import (
+from tech_update_recommender.models import (
     Advisory,
     DependencyReport,
     FullReport,

@@ -54,7 +54,7 @@ def render_report(
 
 ### 4.4 Формат `markdown`
 
-- Заголовок `# DepScope Report`.
+- Заголовок `# Tech Update Recommender Report`.
 - Метаданные: путь, timestamp.
 - Summary-блок (`**Total:** ...`).
 - Таблица в markdown-формате (вручную или через `tabulate`):

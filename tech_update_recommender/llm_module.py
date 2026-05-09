@@ -23,7 +23,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from depscope.models import DependencyReport, FullReport, LLMInput
+from tech_update_recommender.models import DependencyReport, FullReport, LLMInput
 
 logger = logging.getLogger(__name__)
 
@@ -629,7 +629,9 @@ def generate_advice(
 
     litellm = _import_litellm()
     if litellm is None:
-        raise LLMNotAvailableError("litellm не установлен. Установите: pip install depscope[llm]")
+        raise LLMNotAvailableError(
+            "litellm не установлен. Установите: pip install tech-update-recommender[llm]"
+        )
 
     # Усекаем под бюджет контекста (может бросить LLMContextOverflowError).
     truncated = truncate_input(

@@ -15,8 +15,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from depscope import llm_module
-from depscope.llm_module import (
+from tech_update_recommender import llm_module
+from tech_update_recommender.llm_module import (
     SYSTEM_PROMPT,
     LLMAuthError,
     LLMContextOverflowError,
@@ -31,7 +31,7 @@ from depscope.llm_module import (
     generate_advice,
     truncate_input,
 )
-from depscope.models import (
+from tech_update_recommender.models import (
     Advisory,
     DependencyReport,
     FullReport,
@@ -177,7 +177,7 @@ def test_collect_dependency_files_skips_large(tmp_path, caplog):
     small = tmp_path / "package.json"
     small.write_text('{"name":"x"}')
 
-    with caplog.at_level(logging.DEBUG, logger="depscope.llm_module"):
+    with caplog.at_level(logging.DEBUG, logger="tech_update_recommender.llm_module"):
         files = collect_dependency_files(str(tmp_path))
 
     assert "package.json" in files
@@ -398,7 +398,7 @@ def test_litellm_not_installed(monkeypatch):
             model="gemini/gemini-2.0-flash",
             api_key=None,
         )
-    assert "pip install depscope[llm]" in str(exc.value)
+    assert "pip install tech-update-recommender[llm]" in str(exc.value)
 
 
 def test_auth_error_mapped(monkeypatch):
@@ -434,7 +434,7 @@ def test_rate_limit_retries_then_maps(monkeypatch):
     fake_litellm.completion.side_effect = [rate_cls("slow down"), rate_cls("still")]
 
     sleep_mock = MagicMock()
-    monkeypatch.setattr("depscope.llm_module.time.sleep", sleep_mock)
+    monkeypatch.setattr("tech_update_recommender.llm_module.time.sleep", sleep_mock)
 
     with patch.dict(sys.modules, {"litellm": fake_litellm}):
         with pytest.raises(LLMRateLimitError):
@@ -463,7 +463,7 @@ def test_rate_limit_retry_succeeds(monkeypatch):
         _make_completion_response("recovered"),
     ]
 
-    monkeypatch.setattr("depscope.llm_module.time.sleep", MagicMock())
+    monkeypatch.setattr("tech_update_recommender.llm_module.time.sleep", MagicMock())
 
     with patch.dict(sys.modules, {"litellm": fake_litellm}):
         result = generate_advice(
@@ -529,7 +529,7 @@ def test_api_key_not_logged(caplog):
 
     secret = "sk-super-secret-1234567890"
 
-    caplog.set_level(logging.DEBUG, logger="depscope.llm_module")
+    caplog.set_level(logging.DEBUG, logger="tech_update_recommender.llm_module")
     with patch.dict(sys.modules, {"litellm": fake_litellm}):
         generate_advice(
             _input_for_call(),

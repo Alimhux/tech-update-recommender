@@ -1,4 +1,4 @@
-"""CLI DepScope.
+"""CLI Tech Update Recommender.
 
 Финальный pipeline (Блок 6): Syft → deps.dev → (опционально) LLM → отчёт.
 
@@ -19,15 +19,15 @@ import click
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from depscope import __version__
-from depscope.cache import Cache
-from depscope.config import ConfigError, load_config
-from depscope.depsdev_module import DepsDevError, build_report
-from depscope.llm_module import LLMError, build_llm_input, generate_advice
-from depscope.report import render_report
-from depscope.syft_module import SyftError, scan_project
+from tech_update_recommender import __version__
+from tech_update_recommender.cache import Cache
+from tech_update_recommender.config import ConfigError, load_config
+from tech_update_recommender.depsdev_module import DepsDevError, build_report
+from tech_update_recommender.llm_module import LLMError, build_llm_input, generate_advice
+from tech_update_recommender.report import render_report
+from tech_update_recommender.syft_module import SyftError, scan_project
 
-logger = logging.getLogger("depscope")
+logger = logging.getLogger("tech_update_recommender")
 
 
 # ---------------------------------------------------------------------------
@@ -82,9 +82,9 @@ def _build_cli_overrides(
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
-@click.version_option(version=__version__, prog_name="depscope")
+@click.version_option(version=__version__, prog_name="tech-update-recommender")
 def cli() -> None:
-    """DepScope — локальный сканер зависимостей с AI-рекомендациями."""
+    """Tech Update Recommender — локальный сканер зависимостей с AI-рекомендациями."""
 
 
 @cli.command("scan")
@@ -194,7 +194,7 @@ def scan(
     if mode in ("advice", "full") and not config.llm.model:
         raise ConfigError(
             "Для режима --mode=" + mode + " нужно указать LLM-модель: "
-            "через --llm-model, env var DEPSCOPE_LLM_MODEL или ~/.depscope.yaml."
+            "через --llm-model, env var TUR_LLM_MODEL или ~/.tech-update-recommender.yaml."
         )
 
     # 1. SyftModule

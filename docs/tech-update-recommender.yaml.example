@@ -1,11 +1,11 @@
-# Пример конфигурационного файла DepScope.
-# Положите этот файл как ~/.depscope.yaml — DepScope подхватит его автоматически.
+# Пример конфигурационного файла Tech Update Recommender.
+# Положите этот файл как ~/.tech-update-recommender.yaml — он подхватится автоматически.
 #
 # Каскад приоритетов значений (от высшего к низшему):
 #   1. CLI-аргументы (--llm-model, --llm-api-key, --syft-path, …)
-#   2. Переменные окружения (DEPSCOPE_LLM_MODEL, DEPSCOPE_LLM_API_KEY,
-#      ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY, DEPSCOPE_SYFT_PATH)
-#   3. Этот файл (~/.depscope.yaml)
+#   2. Переменные окружения (TUR_LLM_MODEL, TUR_LLM_API_KEY,
+#      ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY, TUR_SYFT_PATH)
+#   3. Этот файл (~/.tech-update-recommender.yaml)
 #   4. Дефолты, заданные в коде
 #
 # Все секции опциональны — при отсутствии используются дефолты.
@@ -19,11 +19,11 @@
 #   model: "gemini/gemini-2.0-flash"
 #
 #   # API-ключ. Лучше держать в env var, чтобы не светить в файле.
-#   # Если оставить пустым — будет взят DEPSCOPE_LLM_API_KEY,
+#   # Если оставить пустым — будет взят TUR_LLM_API_KEY,
 #   # либо ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY.
 #   api_key: "sk-..."
 #
-#   # Лимит контекста промпта (токенов). При превышении — DepScope
+#   # Лимит контекста промпта (токенов). При превышении —
 #   # последовательно урезает дерево/файлы/top-N пакетов.
 #   max_context_tokens: 8000
 
@@ -32,8 +32,8 @@
 # ---------------------------------------------------------------------------
 # cache:
 #   enabled: true
-#   ttl_seconds: 3600           # 1 час
-#   path: "~/.cache/depscope/"  # директория создаётся автоматически
+#   ttl_seconds: 3600                          # 1 час
+#   path: "~/.cache/tech-update-recommender/"  # директория создаётся автоматически
 
 # ---------------------------------------------------------------------------
 # Настройки Syft.

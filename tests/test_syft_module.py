@@ -14,9 +14,9 @@ from unittest.mock import patch
 
 import pytest
 
-from depscope import syft_module
-from depscope.models import PackageInfo
-from depscope.syft_module import (
+from tech_update_recommender import syft_module
+from tech_update_recommender.models import PackageInfo
+from tech_update_recommender.syft_module import (
     SUPPORTED_ECOSYSTEMS,
     SyftError,
     SyftExecutionError,
