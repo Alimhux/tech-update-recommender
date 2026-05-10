@@ -20,17 +20,16 @@ Tech Update Recommender требует Python 3.11+.
 
 ```bash
 # Из PyPI:
-pip install tech-update-recommender[llm]
+pip install tech-upd-recommender
+
 # или через pipx:
-pipx install "tech-update-recommender[llm]"
+pipx install tech-upd-recommender
 
 # Из исходников (для разработки):
-pip install -e ".[llm]"
+pip install -e ".[dev]"
 ```
 
-Группа `[llm]` ставит `litellm`. Без неё Tech Update Recommender работает в режимах
-`report` (без LLM) и просто возвращает понятную ошибку, если запросить
-`advice`/`full`.
+Все зависимости (включая LiteLLM для AI-рекомендаций) ставятся автоматически.
 
 ### Установка Syft
 
@@ -52,14 +51,14 @@ curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -
 
 ```bash
 # 1. Простой отчёт по фактам (без LLM):
-tech-update-recommender scan ./my-project
+tech-upd-recommender scan ./my-project
 
 # 2. Полный отчёт с AI-рекомендациями:
-tech-update-recommender scan ./my-project --mode full \
+tech-upd-recommender scan ./my-project --mode full \
     --llm-model gemini/gemini-2.0-flash
 
 # 3. JSON в файл:
-tech-update-recommender scan ./my-project --output json --save out.json
+tech-upd-recommender scan ./my-project --output json --save out.json
 ```
 
 ## Режимы работы
