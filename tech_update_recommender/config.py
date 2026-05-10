@@ -136,6 +136,8 @@ def _normalize_cli_overrides(cli_overrides: dict[str, Any]) -> dict[str, Any]:
         llm["model"] = model
     if (api_key := cli_overrides.get("llm_api_key")) is not None:
         llm["api_key"] = api_key
+    if (mct := cli_overrides.get("max_context_tokens")) is not None:
+        llm["max_context_tokens"] = mct
     if (syft_path := cli_overrides.get("syft_path")) is not None:
         syft["path"] = syft_path
 

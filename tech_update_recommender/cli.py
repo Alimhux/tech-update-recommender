@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import click
+from dotenv import load_dotenv
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
@@ -65,6 +66,7 @@ def _make_progress() -> Progress:
 def _build_cli_overrides(
     llm_model: str | None,
     llm_api_key: str | None,
+    max_context_tokens: int | None,
     syft_path: str | None,
     no_llm: bool,
 ) -> dict[str, Any]:
@@ -75,9 +77,10 @@ def _build_cli_overrides(
         overrides["llm_model"] = llm_model
     if llm_api_key is not None:
         overrides["llm_api_key"] = llm_api_key
+    if max_context_tokens is not None:
+        overrides["max_context_tokens"] = max_context_tokens
     if syft_path is not None:
         overrides["syft_path"] = syft_path
-    # --no-llm обрабатывается в самом scan() (override mode).
     return overrides
 
 
@@ -133,6 +136,12 @@ def cli() -> None:
     help="API-ключ для LLM-провайдера (или через env vars).",
 )
 @click.option(
+    "--max-context-tokens",
+    type=int,
+    default=None,
+    help="Лимит токенов для LLM-промпта (по умолчанию 8000).",
+)
+@click.option(
     "--no-llm",
     is_flag=True,
     default=False,
@@ -158,6 +167,7 @@ def scan(
     save: str | None,
     llm_model: str | None,
     llm_api_key: str | None,
+    max_context_tokens: int | None,
     no_llm: bool,
     syft_path: str | None,
     verbose: bool,
@@ -167,6 +177,11 @@ def scan(
     _VERBOSE_FLAG["value"] = verbose
     _configure_logging(verbose)
 
+    env_file = Path(path) / ".env"
+    if env_file.is_file():
+        load_dotenv(env_file, override=False)
+        logger.debug("loaded .env from %s", env_file)
+
     output = output.lower()
     mode = mode.lower()
 
@@ -175,7 +190,9 @@ def scan(
         logger.info("--no-llm передан вместе с --mode=%s, режим понижен до report", mode)
         mode = "report"
 
-    cli_overrides = _build_cli_overrides(llm_model, llm_api_key, syft_path, no_llm)
+    cli_overrides = _build_cli_overrides(
+        llm_model, llm_api_key, max_context_tokens, syft_path, no_llm,
+    )
     config = load_config(cli_overrides)
 
     logger.debug(

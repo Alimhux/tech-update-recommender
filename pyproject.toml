@@ -35,6 +35,7 @@ dependencies = [
     "pyyaml",
     "litellm",
     "certifi",
+    "python-dotenv",
 ]
 
 [project.optional-dependencies]
