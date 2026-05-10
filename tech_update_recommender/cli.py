@@ -259,12 +259,16 @@ def scan(
         llm_model_name=config.llm.model if advice else None,
     )
 
-    # 5. Печать или сохранение.
-    if save:
-        Path(save).write_text(text, encoding="utf-8")
-        click.echo(f"Saved to {save}", err=True)
-    else:
-        click.echo(text)
+    # 5. Печать и сохранение.
+    click.echo(text)
+
+    # Автоматически сохраняем в файл при наличии LLM-рекомендаций.
+    save_path = save if save else (
+        "tech-upd-report.md" if mode in ("advice", "full") else None
+    )
+    if save_path:
+        Path(save_path).write_text(text, encoding="utf-8")
+        click.echo(f"Saved to {save_path}", err=True)
 
 
 def main() -> None:
