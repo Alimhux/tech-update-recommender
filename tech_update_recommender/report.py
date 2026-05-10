@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 from typing import Any, Literal
 
@@ -137,6 +138,7 @@ def _render_table(
     # дисклеймера и LLM-текста, чтобы тесты находили их подстрокой).
     console = Console(
         record=True,
+        file=io.StringIO(),
         force_terminal=False,
         no_color=True,
         width=120,
