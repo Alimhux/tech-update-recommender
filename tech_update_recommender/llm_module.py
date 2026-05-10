@@ -630,7 +630,7 @@ def generate_advice(
     litellm = _import_litellm()
     if litellm is None:
         raise LLMNotAvailableError(
-            "litellm не установлен. Установите: pip install tech-update-recommender[llm]"
+            "litellm не установлен. Установите: pip install tech-upd-recommender"
         )
 
     # Усекаем под бюджет контекста (может бросить LLMContextOverflowError).

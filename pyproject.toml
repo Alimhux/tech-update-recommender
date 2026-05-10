@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "tech-update-recommender"
+name = "tech-upd-recommender"
 version = "0.1.0"
 description = "Open-source CLI utility for local dependency analysis with AI-powered update recommendations."
 readme = "README.md"
@@ -33,10 +33,11 @@ dependencies = [
     "pydantic>=2",
     "rich",
     "pyyaml",
+    "litellm",
+    "certifi",
 ]
 
 [project.optional-dependencies]
-llm = ["litellm"]
 dev = [
     "pytest",
     "pytest-asyncio",
@@ -45,7 +46,7 @@ dev = [
 ]
 
 [project.scripts]
-tech-update-recommender = "tech_update_recommender.cli:main"
+tech-upd-recommender = "tech_update_recommender.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/Alimhux/tech-update-recommender"

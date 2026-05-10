@@ -398,7 +398,7 @@ def test_litellm_not_installed(monkeypatch):
             model="gemini/gemini-2.0-flash",
             api_key=None,
         )
-    assert "pip install tech-update-recommender[llm]" in str(exc.value)
+    assert "pip install tech-upd-recommender" in str(exc.value)
 
 
 def test_auth_error_mapped(monkeypatch):
