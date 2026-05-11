@@ -5,12 +5,8 @@
   2. лепим из этого промпт,
   3. зовём litellm.completion, получаем markdown с рекомендациями.
 
-Подробный контракт лежит в ``docs/blocks/05-llm-module.md`` и в PLAN.md.
-
-Пара важных моментов про безопасность:
-  - API-ключ нигде не логируется — ни в чистом виде, ни внутри текста.
-  - В сеть мы ходим только через litellm. В тестах его мокают, реальных
-    запросов нет.
+Важно про безопасность: API-ключ нигде не логируется. И в сеть мы ходим
+только через litellm — в тестах его мокают, реальных запросов нет.
 """
 
 from __future__ import annotations
@@ -100,8 +96,7 @@ _SEMVER_PRIORITY: dict[str | None, int] = {
     None: 0,
 }
 
-# системный промпт. Текст фиксированный — если будете править,
-# не забудьте обновить и PLAN.md, иначе разъедется
+# системный промпт — то, что отправляем модели в роли "system"
 SYSTEM_PROMPT: str = (
     "Ты — эксперт по управлению зависимостями в software-проектах.\n"
     "Тебе предоставлен отчёт об устаревших зависимостях проекта,\n"
@@ -283,7 +278,7 @@ def collect_dependency_files(path: str) -> dict[str, str]:
             logger.debug("cannot stat %s: %s", rel, err)
             continue
         if size > _MAX_DEPENDENCY_FILE_BYTES:
-            # слишком большой файл — лочим, но пишем в дебаг чтобы было видно почему
+            # слишком большой файл — пропускаем, но в debug пишем почему
             logger.debug(
                 "skip large file %s (%d bytes > %d)",
                 rel,
@@ -369,7 +364,7 @@ def build_llm_input(report: FullReport, project_path: str) -> LLMInput:
     )
 
 
-# --- 4) сам промпт. Это то, что в итоге уходит в LLM как user message
+# 4) сам промпт. Это то, что в итоге уходит в LLM как user message
 
 
 def _report_for_prompt(report: FullReport) -> str:
@@ -383,7 +378,6 @@ def build_user_prompt(llm_input: LLMInput) -> str:
     """Собираем user-сообщение по кусочкам.
 
     Структура: отчёт → дерево проекта → файлы зависимостей → инструкция.
-    Формат фиксированный, описан в ``05-llm-module.md``.
     """
 
     parts: list[str] = []
@@ -436,19 +430,18 @@ def _import_litellm() -> Any | None:
 def count_tokens(model: str, text: str) -> int:
     """Прикидываем сколько токенов займёт текст.
 
-    Если litellm есть и знает модель — спросим у него (он точнее).
-    Если нет — берём грубую формулу ``len // 4``. Для решения
-    "влезет / не влезет" этого хватает с головой.
+    Если litellm установлен — спрашиваем у него. Иначе берём грубую
+    оценку len // 4. Точность тут не критична — нужно только понять,
+    влезаем в контекст или нет.
     """
 
     litellm = _import_litellm()
     if litellm is not None:
         try:
             return int(litellm.token_counter(model=model, text=text))
-        except Exception as err:  # noqa: BLE001 — token_counter любит ругаться по-разному
-            # модель неизвестна / упало по своим причинам — просто идём в fallback
+        except Exception as err:  # noqa: BLE001 — token_counter может кидать что угодно
             logger.debug("token_counter fallback for %s: %s", model, err)
-    # запасной вариант: ~4 символа ≈ 1 токен (грубо, но работает)
+    # ~4 символа на токен — очень грубо, но для проверки лимита сойдёт
     return max(1, len(text) // 4)
 
 
@@ -571,11 +564,8 @@ def _is_local_model(model: str) -> bool:
 
 
 def _map_litellm_error(litellm: Any, err: Exception) -> LLMError:
-    """Превращаем ошибки litellm в наши, чтобы CLI знал что показывать.
-
-    Логика: смотрим, какого типа исключение прилетело, и подбираем
-    подходящий класс из нашей иерархии.
-    """
+    """Превращаем ошибки litellm в наши собственные, чтобы CLI знал,
+    что показать юзеру."""
 
     # 1. кривой API-ключ
     auth_cls = getattr(litellm, "AuthenticationError", None)
@@ -737,8 +727,9 @@ def generate_advice(
         len(content),
     )
 
-    # _is_local_model сейчас на логику не влияет, но оставлен как "якорь":
-    # удобно будет позже добавить разную обработку ключа для локалок и облака
+    # вызываем _is_local_model просто чтобы не было предупреждения
+    # про неиспользованную функцию — пригодится когда добавим
+    # разную обработку ключа для ollama и облачных моделей
     _ = _is_local_model(model)
 
     return content
