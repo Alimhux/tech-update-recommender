@@ -1,18 +1,18 @@
 # Tech Update Recommender
 
 Tech Update Recommender — open-source CLI-утилита для локального анализа зависимостей проекта.
-Она находит application-level зависимости через [Syft](https://github.com/anchore/syft),
-проверяет их версии и известные уязвимости через [deps.dev](https://deps.dev),
-и опционально генерирует AI-рекомендации по обновлению через
+Она находит все используемые библиотеки, используемые в проекте и их версии через [Syft](https://github.com/anchore/syft),
+проверяет их на известные уязвимости через [deps.dev](https://deps.dev),
+и генерирует AI-рекомендации по обновлению, используя
 [LiteLLM](https://github.com/BerriAI/litellm).
 
 Ключевые возможности:
 
-- Локально, без отправки исходного кода на сервер.
-- Поддержка ecosystem'ов npm, PyPI, Maven, Go, Cargo, RubyGems, NuGet.
+- Код выполняется локально, без отправки исходного кода на сервер.
+- Поддержка экосистем npm, PyPI, Maven, Go, Cargo, RubyGems, NuGet.
 - Кеш ответов deps.dev (SQLite, TTL 1 час) — повторные запуски быстрые.
-- Несколько форматов вывода: `table` (rich), `json`, `markdown`.
-- Выбор LLM-провайдера через LiteLLM (OpenAI / Anthropic / Gemini / Yandex Cloud / Ollama и любые OpenAI-совместимые API).
+- Поддержиивается несколько форматов вывода: `table` (rich), `json`, `markdown`.
+- Широкий выбор LLM-провайдера через LiteLLM (OpenAI / Anthropic / Gemini / Yandex Cloud / Ollama и любые OpenAI-совместимые API).
 
 ## Установка
 
