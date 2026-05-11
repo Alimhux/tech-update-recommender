@@ -15,7 +15,7 @@ from tech_update_recommender.models import (
     PackageInfo,
 )
 
-# --- PackageInfo --------------------------------------------------------------
+# PackageInfo
 
 
 def test_package_info_valid() -> None:
@@ -44,7 +44,7 @@ def test_package_info_wrong_type() -> None:
         )
 
 
-# --- Advisory -----------------------------------------------------------------
+# Advisory
 
 
 def test_advisory_valid() -> None:
@@ -58,7 +58,7 @@ def test_advisory_severity_must_be_number() -> None:
         Advisory(id="CVE-2023-0001", severity="high", summary="x")  # type: ignore[arg-type]
 
 
-# --- DependencyReport ---------------------------------------------------------
+# DependencyReport
 
 
 def test_dependency_report_minimal() -> None:
@@ -98,7 +98,7 @@ def test_dependency_report_missing_required() -> None:
         )  # type: ignore[call-arg]
 
 
-# --- FullReport ---------------------------------------------------------------
+# FullReport
 
 
 def test_full_report_valid() -> None:
@@ -138,7 +138,7 @@ def test_full_report_invalid_timestamp() -> None:
         )
 
 
-# --- LLMInput -----------------------------------------------------------------
+# LLMInput
 
 
 def test_llm_input_valid(sample_full_report: FullReport) -> None:

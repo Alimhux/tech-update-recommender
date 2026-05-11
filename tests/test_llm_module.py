@@ -1,8 +1,7 @@
 """Тесты для LLM-модуля.
 
-Здесь всё мокается, в сеть мы не ходим (а то тесты будут падать без
-интернета). Берём фейковые исключения от litellm и смотрим, что наш код
-их правильно ловит.
+Всё мокается, в сеть не ходим (иначе тесты падают без интернета).
+Берём фейковые исключения от litellm и смотрим, что наш код их ловит.
 """
 
 from __future__ import annotations
@@ -38,7 +37,7 @@ from tech_update_recommender.models import (
     LLMInput,
 )
 
-# --- маленькие фабрики, чтобы не плодить копипасту в каждом тесте
+# маленькие фабрики, чтобы не плодить копипасту в каждом тесте
 
 
 def _make_dep(
@@ -48,7 +47,7 @@ def _make_dep(
     semver_diff: str | None = "patch",
     advisories: int = 0,
 ) -> DependencyReport:
-    # быстро делаем один пакетик для теста (по умолчанию устаревший)
+    # один пакет для теста (по умолчанию устаревший)
     return DependencyReport(
         name=name,
         ecosystem="npm",
@@ -63,7 +62,7 @@ def _make_dep(
 
 
 def _make_report(deps: list[DependencyReport]) -> FullReport:
-    # обёртка над списком зависимостей — чтобы получить FullReport
+    # обёртка над списком зависимостей, чтобы получить FullReport
     return FullReport(
         supported=deps,
         unsupported=[],
@@ -80,14 +79,14 @@ def _make_completion_response(content: str = "ok") -> SimpleNamespace:
     return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content))])
 
 
-# 1) тестим collect_project_tree
+# 1) collect_project_tree
 
 
 def test_collect_project_tree_excludes_node_modules(tmp_path):
-    # делаем нормальный файл, который должен остаться
+    # нормальный файл — должен остаться
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "app.py").write_text("print('hi')")
-    # а дальше — папки, которые надо игнорить
+    # папки, которые надо игнорить
     (tmp_path / "node_modules").mkdir()
     (tmp_path / "node_modules" / "lodash.js").write_text("//")
     (tmp_path / ".git").mkdir()
@@ -98,15 +97,15 @@ def test_collect_project_tree_excludes_node_modules(tmp_path):
     (tmp_path / ".venv" / "pyvenv.cfg").write_text("home = /usr/bin")
     (tmp_path / "build").mkdir()
     (tmp_path / "build" / "out.js").write_text("//")
-    # отдельно ловлю кейс: node_modules внутри src — тоже не должен попасть
+    # отдельный кейс: node_modules внутри src — тоже мимо
     (tmp_path / "src" / "node_modules").mkdir()
     (tmp_path / "src" / "node_modules" / "left-pad.js").write_text("//")
 
     out = collect_project_tree(str(tmp_path))
 
-    # хороший файл — на месте
+    # хороший файл на месте
     assert "app.py" in out
-    # а всё лишнее — отвалилось
+    # всё лишнее отвалилось
     assert "node_modules" not in out
     assert ".git" not in out
     assert "venv" not in out
@@ -115,30 +114,30 @@ def test_collect_project_tree_excludes_node_modules(tmp_path):
 
 
 def test_collect_project_tree_max_lines(tmp_path):
-    # 50 файлов закидываем, а лимит ставим 10 — должна быть отметка про обрезание
+    # 50 файлов, лимит 10 — должна быть пометка про обрезание
     for i in range(50):
         (tmp_path / f"f_{i:03d}.txt").write_text("x")
 
     out = collect_project_tree(str(tmp_path), max_lines=10)
     lines = out.splitlines()
 
-    # 10 файлов + 1 строчка типа "... обрезано" = 11
+    # 10 файлов + 1 строка "... обрезано" = 11
     assert len(lines) == 11
     assert lines[-1].startswith("... (truncated,")
     assert "40 more files" in lines[-1]
 
 
 def test_collect_project_tree_empty_for_missing_dir(tmp_path):
-    # если папки нет — просто пустая строка, без падений
+    # папки нет — пустая строка, без падений
     missing = tmp_path / "does_not_exist"
     assert collect_project_tree(str(missing)) == ""
 
 
-# --- 2) теперь collect_dependency_files
+# 2) collect_dependency_files
 
 
 def test_collect_dependency_files_known_set(tmp_path):
-    # раскидываем разные манифесты зависимостей
+    # раскидываем разные манифесты
     (tmp_path / "requirements.txt").write_text("flask==2.0.0\n")
     (tmp_path / "package.json").write_text('{"name":"x"}')
     (tmp_path / "pyproject.toml").write_text('[project]\nname="x"\n')
@@ -149,9 +148,9 @@ def test_collect_dependency_files_known_set(tmp_path):
     # это уже через glob-паттерны должно ловиться
     (tmp_path / "requirements-dev.txt").write_text("pytest\n")
     (tmp_path / "App.csproj").write_text("<Project/>")
-    # README не нужен — его не должно быть в результатах
+    # README не нужен
     (tmp_path / "README.md").write_text("# hi")
-    # хитрая ловушка: package.json внутри node_modules — игнорим
+    # ловушка: package.json внутри node_modules — игнорим
     nm = tmp_path / "node_modules" / "express"
     nm.mkdir(parents=True)
     (nm / "package.json").write_text('{"name":"express"}')
@@ -166,17 +165,17 @@ def test_collect_dependency_files_known_set(tmp_path):
     assert "service/go.mod" in files
     assert "requirements-dev.txt" in files
     assert "App.csproj" in files
-    # README не должен попасть
+    # README не попал
     assert "README.md" not in files
-    # и из node_modules ничего не пролезло
+    # из node_modules ничего не пролезло
     assert all("node_modules" not in path for path in files.keys())
 
 
 def test_collect_dependency_files_skips_large(tmp_path, caplog):
-    # большой lock-файл (250 KB) — пропускаем, лимит вроде 200 KB
+    # большой lock-файл (250 KB) — пропускаем, лимит 200 KB
     big = tmp_path / "package-lock.json"
     big.write_text("a" * (250 * 1024))
-    # а маленький package.json пусть остаётся
+    # маленький package.json пусть остаётся
     small = tmp_path / "package.json"
     small.write_text('{"name":"x"}')
 
@@ -185,12 +184,12 @@ def test_collect_dependency_files_skips_large(tmp_path, caplog):
 
     assert "package.json" in files
     assert "package-lock.json" not in files
-    # ещё проверю, что в DEBUG-логи попало сообщение про пропуск
+    # в DEBUG-логи должно попасть сообщение про пропуск
     assert any("skip large file" in rec.getMessage() for rec in caplog.records)
 
 
 def test_collect_dependency_files_empty_for_missing_dir(tmp_path):
-    # папки нет → возвращается пустой dict, никаких ошибок
+    # папки нет, возвращается пустой dict, никаких ошибок
     missing = tmp_path / "does_not_exist"
     assert collect_dependency_files(str(missing)) == {}
 
@@ -199,19 +198,19 @@ def test_collect_dependency_files_empty_for_missing_dir(tmp_path):
 
 
 def test_build_llm_input_top_n(tmp_path):
-    # генерим 300 устаревших пакетов, ожидаем что в LLM пойдут только топ-50
+    # 300 устаревших пакетов, в LLM должны пойти только топ-50
     deps = [_make_dep(f"pkg_{i:03d}", is_outdated=True, semver_diff="patch") for i in range(300)]
     report = _make_report(deps)
     llm_input = build_llm_input(report, str(tmp_path))
 
     assert len(llm_input.report.supported) == 50
-    # но общие счётчики надо оставить как было — LLM должна видеть реальный масштаб
+    # счётчики должны остаться как было — LLM видит реальный масштаб
     assert llm_input.report.total_packages == 300
     assert llm_input.report.outdated_count == 300
 
 
 def test_build_llm_input_filters_only_outdated_or_vulnerable(tmp_path):
-    # три случая: свежий пакет, устаревший и "новый, но с дырой"
+    # три случая: свежий, устаревший, "новый, но с дырой"
     deps = [
         _make_dep("up_to_date", is_outdated=False, semver_diff=None),
         _make_dep("outdated", is_outdated=True, semver_diff="patch"),
@@ -226,12 +225,12 @@ def test_build_llm_input_filters_only_outdated_or_vulnerable(tmp_path):
 
     llm_input = build_llm_input(report, str(tmp_path))
     names = {d.name for d in llm_input.report.supported}
-    # up_to_date — без CVE и не устаревший, его не пропускаем
+    # up_to_date — без CVE и не устаревший, пропускаем
     assert names == {"outdated", "secure_but_old"}
 
 
 def test_priority_ordering(tmp_path):
-    # хочу убедиться: если у пакета есть CVE, он идёт первым в списке
+    # если у пакета есть CVE — он идёт первым
     deps = [
         _make_dep("plain_minor", is_outdated=True, semver_diff="minor"),
         _make_dep("plain_major", is_outdated=True, semver_diff="major"),
@@ -246,7 +245,7 @@ def test_priority_ordering(tmp_path):
 
 
 def test_top_n_priority_cve_before_major(tmp_path):
-    # отдельная проверка: даже CVE без обновления > major без CVE
+    # CVE без обновления > major без CVE
     deps = [
         _make_dep("major_no_cve", is_outdated=True, semver_diff="major"),
         _make_dep("cve_only", is_outdated=False, semver_diff=None, advisories=1),
@@ -259,11 +258,11 @@ def test_top_n_priority_cve_before_major(tmp_path):
     assert names[1] == "major_no_cve"
 
 
-# --- 4) truncate_input — урезание по токенам
+# 4) truncate_input — урезание по токенам
 
 
 def _make_long_input() -> LLMInput:
-    # фабрика большого инпута: куча файлов в дереве + жирный lock-файл
+    # большой инпут: куча файлов в дереве + жирный lock-файл
     deps = [_make_dep(f"pkg_{i:04d}", advisories=0) for i in range(300)]
     report = _make_report(deps)
     partial = llm_module._build_partial_report(report, llm_module._TOP_N_FULL)
@@ -282,10 +281,10 @@ def _make_long_input() -> LLMInput:
 
 def test_context_truncation_returns_smaller_input():
     big = _make_long_input()
-    # 4000 токенов — целое дерево не влезет, но после обрезки должно нормально поместиться
+    # 4000 токенов — целое дерево не влезет, но после обрезки должно поместиться
     truncated = truncate_input(big, model="gemini/gemini-2.0-flash", max_context_tokens=4000)
 
-    # ну хоть что-то должно стать меньше — дерево, или lock-файл, или список пакетов
+    # хоть что-то должно стать меньше — дерево, lock-файл или список пакетов
     smaller = (
         len(truncated.project_tree) < len(big.project_tree)
         or len(truncated.dependency_files.get("package-lock.json", ""))
@@ -297,20 +296,20 @@ def test_context_truncation_returns_smaller_input():
 
 def test_context_truncation_overflow_raises():
     big = _make_long_input()
-    # ставим тупо 1 токен — сколько ни режь, не влезет, надо упасть с ошибкой
+    # 1 токен — сколько ни режь, не влезет
     with pytest.raises(LLMContextOverflowError):
         truncate_input(big, model="gemini/gemini-2.0-flash", max_context_tokens=1)
 
 
 def test_truncate_input_passthrough_when_fits():
-    # маленький инпут — и так помещается, ничего трогать не надо
+    # маленький инпут — и так помещается, ничего не трогаем
     deps = [_make_dep("pkg_a")]
     report = _make_report(deps)
     partial = llm_module._build_partial_report(report, llm_module._TOP_N_FULL)
     small = LLMInput(report=partial, project_tree="src/a.py", dependency_files={})
 
     out = truncate_input(small, model="gemini/gemini-2.0-flash", max_context_tokens=8000)
-    # должно выйти один в один то, что положили
+    # вышло один в один то, что положили
     assert out.project_tree == small.project_tree
     assert out.report.supported == small.report.supported
 
@@ -321,7 +320,7 @@ def test_truncate_input_passthrough_when_fits():
 def test_count_tokens_fallback_when_no_litellm(monkeypatch):
     # эмулируем отсутствие litellm
     monkeypatch.setitem(sys.modules, "litellm", None)
-    # fallback грубый: ~ длина / 4. У нас 8 символов → 2 токена
+    # fallback грубый: длина / 4. У нас 8 символов, ждём 2 токена
     assert count_tokens("any-model", "abcdefgh") == 2
 
 
@@ -332,12 +331,12 @@ def test_count_tokens_uses_litellm_when_available(monkeypatch):
     monkeypatch.setitem(sys.modules, "litellm", fake)
 
     assert count_tokens("gpt-x", "hello") == 42
-    # ну и заодно проверим, что мы его правильно дергаем
+    # заодно проверим, что дёрнули правильно
     fake.token_counter.assert_called_once_with(model="gpt-x", text="hello")
 
 
 def test_count_tokens_handles_litellm_exception(monkeypatch):
-    # а если litellm.token_counter упал — должны мягко уйти на fallback
+    # если litellm.token_counter упал — мягко уходим на fallback
     fake = MagicMock()
     fake.token_counter.side_effect = RuntimeError("unknown model")
     monkeypatch.setitem(sys.modules, "litellm", fake)
@@ -346,11 +345,11 @@ def test_count_tokens_handles_litellm_exception(monkeypatch):
     assert count_tokens("weird-model", "abcdefgh") == 2
 
 
-# --- 6) generate_advice. Тут самое интересное: happy path + ошибки
+# 6) generate_advice. Тут самое интересное: happy path + ошибки
 
 
 def _input_for_call() -> LLMInput:
-    # маленький готовый LLMInput, чтобы каждый тест не собирал свой
+    # маленький готовый LLMInput
     deps = [_make_dep("flask", advisories=1)]
     report = _make_report(deps)
     partial = llm_module._build_partial_report(report, llm_module._TOP_N_FULL)
@@ -362,14 +361,14 @@ def _input_for_call() -> LLMInput:
 
 
 def test_generate_advice_happy_path():
-    # самый базовый сценарий — litellm работает, отдаёт ответ, всё ок
+    # базовый сценарий — litellm работает, отдаёт ответ
     fake_litellm = MagicMock()
     fake_litellm.completion.return_value = _make_completion_response(
         "## 🔴 Критичные обновления\n- flask"
     )
-    # token_counter роняем — пусть идёт fallback (нам он тут не интересен)
+    # token_counter роняем — пусть идёт fallback
     fake_litellm.token_counter.side_effect = RuntimeError("nope")
-    # фейковые классы ошибок — потому что код их сравнивает по isinstance
+    # фейковые классы ошибок — код сравнивает по isinstance
     fake_litellm.AuthenticationError = type("AuthenticationError", (Exception,), {})
     fake_litellm.RateLimitError = type("RateLimitError", (Exception,), {})
     fake_litellm.APIConnectionError = type("APIConnectionError", (Exception,), {})
@@ -383,21 +382,21 @@ def test_generate_advice_happy_path():
             api_key="secret-key",
         )
 
-    # ответ от модели должен пробросится наружу как есть
+    # ответ модели пробрасывается как есть
     assert "flask" in result
     fake_litellm.completion.assert_called_once()
     kwargs = fake_litellm.completion.call_args.kwargs
-    # и параметры тоже должны быть переданы как надо
+    # параметры тоже на месте
     assert kwargs["model"] == "gemini/gemini-2.0-flash"
     assert kwargs["api_key"] == "secret-key"
-    # system-промпт должен быть тот самый, который мы экспортируем
+    # system-промпт тот самый, который экспортируем
     assert kwargs["messages"][0]["content"] == SYSTEM_PROMPT
     assert kwargs["messages"][0]["role"] == "system"
     assert kwargs["messages"][1]["role"] == "user"
 
 
 def test_litellm_not_installed(monkeypatch):
-    # если litellm нет вообще — должна быть понятная ошибка с инструкцией
+    # litellm нет вообще — понятная ошибка с инструкцией
     monkeypatch.setitem(sys.modules, "litellm", None)
     with pytest.raises(LLMNotAvailableError) as exc:
         generate_advice(
@@ -405,12 +404,12 @@ def test_litellm_not_installed(monkeypatch):
             model="gemini/gemini-2.0-flash",
             api_key=None,
         )
-    # в сообщении должна быть подсказка как поставить
+    # в сообщении подсказка как поставить
     assert "pip install tech-upd-recommender" in str(exc.value)
 
 
 def test_auth_error_mapped(monkeypatch):
-    # ключ кривой → litellm кидает AuthenticationError → у нас должен быть LLMAuthError
+    # кривой ключ: litellm кидает AuthenticationError, а у нас должен быть LLMAuthError
     auth_cls = type("AuthenticationError", (Exception,), {})
     fake_litellm = MagicMock()
     fake_litellm.AuthenticationError = auth_cls
@@ -428,12 +427,12 @@ def test_auth_error_mapped(monkeypatch):
                 model="gemini/gemini-2.0-flash",
                 api_key="bad",
             )
-    # юзеру в сообщении должно быть про API-ключ
+    # в сообщении должно быть про API-ключ
     assert "API-ключ" in str(exc.value)
 
 
 def test_rate_limit_retries_then_maps(monkeypatch):
-    # rate limit два раза подряд → должен попытаться ещё раз и сдаться
+    # rate limit два раза подряд: должен попробовать ещё раз и сдаться
     rate_cls = type("RateLimitError", (Exception,), {})
     fake_litellm = MagicMock()
     fake_litellm.AuthenticationError = type("AuthenticationError", (Exception,), {})
@@ -442,10 +441,10 @@ def test_rate_limit_retries_then_maps(monkeypatch):
     fake_litellm.Timeout = type("Timeout", (Exception,), {})
     fake_litellm.BadRequestError = type("BadRequestError", (Exception,), {})
     fake_litellm.token_counter.side_effect = RuntimeError("nope")
-    # два rate-limit подряд: и в первый раз, и в retry
+    # два rate-limit подряд: первый и retry
     fake_litellm.completion.side_effect = [rate_cls("slow down"), rate_cls("still")]
 
-    # мокаем sleep — а то реальный тест будет тормозить
+    # мокаем sleep — иначе тест будет тормозить
     sleep_mock = MagicMock()
     monkeypatch.setattr("tech_update_recommender.llm_module.time.sleep", sleep_mock)
 
@@ -459,12 +458,12 @@ def test_rate_limit_retries_then_maps(monkeypatch):
 
     # ждали 5 секунд один раз (между двумя попытками)
     sleep_mock.assert_called_once_with(5)
-    # и саму completion вызвали ровно 2 раза
+    # completion дёрнули ровно 2 раза
     assert fake_litellm.completion.call_count == 2
 
 
 def test_rate_limit_retry_succeeds(monkeypatch):
-    # первый вызов — 429, второй — нормальный ответ. Должны его и вернуть
+    # первый вызов — 429, второй — нормальный ответ
     rate_cls = type("RateLimitError", (Exception,), {})
     fake_litellm = MagicMock()
     fake_litellm.AuthenticationError = type("AuthenticationError", (Exception,), {})
@@ -478,7 +477,7 @@ def test_rate_limit_retry_succeeds(monkeypatch):
         _make_completion_response("recovered"),
     ]
 
-    # снова sleep заглушим, чтобы тест не висел
+    # sleep тоже заглушим
     monkeypatch.setattr("tech_update_recommender.llm_module.time.sleep", MagicMock())
 
     with patch.dict(sys.modules, {"litellm": fake_litellm}):
@@ -491,7 +490,7 @@ def test_rate_limit_retry_succeeds(monkeypatch):
 
 
 def test_network_error_mapped(monkeypatch):
-    # таймаут от litellm → у нас должно стать LLMNetworkError
+    # таймаут от litellm должен превратиться в LLMNetworkError
     timeout_cls = type("Timeout", (Exception,), {})
     fake_litellm = MagicMock()
     fake_litellm.AuthenticationError = type("AuthenticationError", (Exception,), {})
@@ -512,7 +511,7 @@ def test_network_error_mapped(monkeypatch):
 
 
 def test_local_model_no_api_key_required():
-    # для локальной ollama-модели ключ не нужен, и падать без него мы не должны
+    # для ollama (локально) ключ не нужен, и падать без него мы не должны
     fake_litellm = MagicMock()
     fake_litellm.completion.return_value = _make_completion_response("local advice")
     fake_litellm.token_counter.side_effect = RuntimeError("nope")
@@ -529,13 +528,13 @@ def test_local_model_no_api_key_required():
             api_key=None,
         )
     assert result == "local advice"
-    # api_key=None так и должен уйти в litellm — он сам решит, что делать
+    # api_key=None так и уйдёт в litellm — он сам решит что делать
     kwargs = fake_litellm.completion.call_args.kwargs
     assert kwargs["api_key"] is None
 
 
 def test_api_key_not_logged(caplog):
-    # очень важная проверка: ключ нигде не должен светиться в логах
+    # ключ нигде не должен светиться в логах
     fake_litellm = MagicMock()
     fake_litellm.completion.return_value = _make_completion_response("advice text")
     fake_litellm.token_counter.side_effect = RuntimeError("nope")
@@ -545,7 +544,7 @@ def test_api_key_not_logged(caplog):
     fake_litellm.Timeout = type("Timeout", (Exception,), {})
     fake_litellm.BadRequestError = type("BadRequestError", (Exception,), {})
 
-    # подсовываем очень "узнаваемый" ключ, чтобы потом легко поискать
+    # узнаваемый ключ — чтобы потом легко поискать
     secret = "sk-super-secret-1234567890"
 
     caplog.set_level(logging.DEBUG, logger="tech_update_recommender.llm_module")
@@ -564,17 +563,17 @@ def test_api_key_not_logged(caplog):
             assert secret not in str(a)
 
 
-# 7) user-промпт, проверяем что в нём все нужные секции
+# 7) user-промпт — проверяем что все секции на месте
 
 
 def test_build_user_prompt_contains_sections():
-    # просто хочу убедиться, что в промпте есть все наши заголовки
+    # в промпте должны быть все заголовки
     llm_input = _input_for_call()
     prompt = build_user_prompt(llm_input)
     assert "Отчёт об устаревших и уязвимых зависимостях:" in prompt
     assert "Структура проекта:" in prompt
     assert "Файлы зависимостей:" in prompt
-    # имя файла зависимостей тоже должно фигурировать
+    # имя файла зависимостей тоже на месте
     assert "=== requirements.txt ===" in prompt
-    # и финальная инструкция для модели на месте
+    # и финальная инструкция для модели
     assert "Сформируй рекомендации в указанном формате." in prompt

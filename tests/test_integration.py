@@ -1,7 +1,7 @@
 """Интеграционные тесты CLI pipeline.
 
-Все внешние зависимости (syft, deps.dev, LiteLLM) мокаются — реальные
-HTTP/subprocess вызовы недопустимы.
+Все внешние зависимости (syft, deps.dev, LiteLLM) мокаются —
+никаких реальных HTTP/subprocess вызовов.
 """
 
 from __future__ import annotations
@@ -89,7 +89,7 @@ def mock_full_report(
 
 
 def _project_path(tmp_path: Path) -> str:
-    """Создать пустой каталог-проект (path должен существовать для click)."""
+    """Создаём пустой каталог-проект (path должен существовать для click)."""
 
     project = tmp_path / "project"
     project.mkdir()
@@ -102,7 +102,7 @@ def test_full_pipeline_with_mocks(
     mock_full_report: FullReport,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Полный pipeline в режиме full: syft → deps.dev → LLM → файл (не в консоль)."""
+    """Полный pipeline в режиме full: syft, deps.dev, LLM, файл (не в консоль)."""
 
     monkeypatch.chdir(tmp_path)
     runner = CliRunner()
@@ -140,10 +140,10 @@ def test_full_pipeline_with_mocks(
         )
 
     assert result.exit_code == 0, result.output
-    # Отчёт НЕ выводится в stdout — только сообщение о сохранении в stderr.
+    # отчёт НЕ выводится в stdout — только сообщение о сохранении в stderr
     assert "tech-upd-report.md" in result.output
 
-    # Отчёт записан в файл.
+    # отчёт записан в файл
     report_file = tmp_path / "tech-upd-report.md"
     assert report_file.is_file()
     content = report_file.read_text(encoding="utf-8")
@@ -263,13 +263,13 @@ def test_save_to_file(
 
 
 def test_advice_mode_without_model_raises_config_error(tmp_path: Path) -> None:
-    """--mode=advice без модели → ConfigError → exit code 5."""
+    """--mode=advice без модели даёт ConfigError и exit code 5."""
 
     runner = CliRunner()
     project = _project_path(tmp_path)
 
-    # Нужно подменить env vars и yaml — иначе пользовательский конфиг
-    # подцепится. Patch'им load_config, чтобы отдавать пустой Config.
+    # подменяем env vars и yaml — иначе подцепится пользовательский конфиг.
+    # patch'им load_config, чтобы отдавал пустой Config
     from tech_update_recommender.config import Config
 
     with (
@@ -282,11 +282,10 @@ def test_advice_mode_without_model_raises_config_error(tmp_path: Path) -> None:
             standalone_mode=True,
         )
 
-    # При standalone_mode=True click сам ловит SystemExit и сообщения
-    # выводятся через ConfigError → click.echo → exit 0 от runner-а
-    # не подходит. Используем main()? CliRunner всегда вызывает cli
-    # напрямую. Проверим, что scan_project не успел вызваться.
+    # при standalone_mode=True click сам ловит SystemExit и сообщения
+    # выводятся через ConfigError, click.echo, exit 0 от runner-а не подходит.
+    # CliRunner всегда вызывает cli напрямую — проверим, что scan_project не дёрнули
     scan_mock.assert_not_called()
-    # ConfigError бросается из scan() — runner ловит его как exception.
+    # ConfigError бросается из scan() — runner ловит его как exception
     assert result.exception is not None
     assert "advice" in str(result.exception) or "model" in str(result.exception).lower()

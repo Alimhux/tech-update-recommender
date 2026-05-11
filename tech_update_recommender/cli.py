@@ -1,13 +1,11 @@
 """CLI для Tech Update Recommender.
 
-Это финальный пайплайн: сначала сканируем проект через Syft,
-потом подтягиваем данные из deps.dev, при необходимости просим LLM
-дать рекомендации и в конце собираем отчёт.
-
-Точка входа — main(), она вызывается через console_scripts.
+Финальный пайплайн: сканируем проект через Syft, подтягиваем данные
+из deps.dev, при необходимости просим LLM дать рекомендации и собираем
+отчёт. Точка входа — main(), вызывается через console_scripts.
 
 Прогресс показываем через rich в stderr, чтобы не смешивать его
-с основным выводом в stdout, особенно если пользователь выбрал JSON.
+с основным выводом в stdout (особенно когда пользователь выбрал JSON).
 """
 
 from __future__ import annotations
@@ -33,16 +31,15 @@ from tech_update_recommender.syft_module import SyftError, scan_project
 logger = logging.getLogger("tech_update_recommender")
 
 
-# Тут храним значение --verbose.
-# Нужно это для main(): если случится неожиданная ошибка, надо понять,
-# показывать полный traceback или просто короткое сообщение.
+# храним значение --verbose. Нужно для main(): при неожиданной ошибке
+# решаем, показывать полный traceback или короткое сообщение
 _VERBOSE_FLAG = {"value": False}
 
 
 def _configure_logging(verbose: bool) -> None:
-    """Настраиваем логирование для приложения."""
+    """Настраиваем логирование."""
 
-    # В verbose-режиме показываем больше деталей, иначе только предупреждения и ошибки.
+    # в verbose показываем больше деталей, иначе только warning/error
     level = logging.DEBUG if verbose else logging.WARNING
 
     logging.basicConfig(
@@ -53,9 +50,9 @@ def _configure_logging(verbose: bool) -> None:
 
 
 def _make_progress() -> Progress:
-    """Создаём прогресс-бар для долгих шагов."""
+    """Прогресс-бар для долгих шагов."""
 
-    # Пишем именно в stderr, чтобы stdout оставался чистым для отчёта или JSON.
+    # пишем в stderr, чтобы stdout оставался чистым для отчёта или JSON
     return Progress(
         SpinnerColumn(),
         TextColumn("{task.description}"),
@@ -71,12 +68,12 @@ def _build_cli_overrides(
     syft_path: str | None,
     no_llm: bool,
 ) -> dict[str, Any]:
-    """Собираем настройки, которые пользователь передал через CLI."""
+    """Настройки, которые пользователь передал через CLI."""
 
     overrides: dict[str, Any] = {}
 
-    # Добавляем только те параметры, которые реально были переданы.
-    # Остальное load_config возьмёт из env или конфиг-файла.
+    # добавляем только реально переданные параметры. Остальное
+    # load_config возьмёт из env или конфиг-файла
     if llm_model is not None:
         overrides["llm_model"] = llm_model
     if llm_api_key is not None:
@@ -185,7 +182,7 @@ def scan(
     output = output.lower()
     mode = mode.lower()
 
-    # Если пользователь явно отключил LLM, то оставляем только обычный отчёт.
+    # если пользователь явно отключил LLM — оставляем обычный отчёт
     if no_llm and mode != "report":
         logger.info("--no-llm передан вместе с --mode=%s, режим понижен до report", mode)
         mode = "report"
@@ -213,20 +210,20 @@ def scan(
         config.syft.path,
     )
 
-    # Для режимов с LLM обязательно должна быть указана модель.
+    # для режимов с LLM обязательно нужна модель
     if mode in ("advice", "full") and not config.llm.model:
         raise ConfigError(
             "Для режима --mode=" + mode + " нужно указать LLM-модель: "
             "через --llm-model, env var TUR_LLM_MODEL или ~/.tech-update-recommender.yaml."
         )
 
-    # Шаг 1: сканируем проект через Syft и получаем список зависимостей.
+    # шаг 1: сканируем проект через Syft, получаем список зависимостей
     with _make_progress() as progress:
         task_id = progress.add_task("Scanning project with syft...", total=None)
         supported, unsupported = scan_project(path, syft_path=config.syft.path)
         progress.update(task_id, completed=1)
 
-    # Шаг 2: идём в deps.dev и собираем фактический отчёт.
+    # шаг 2: идём в deps.dev и собираем фактический отчёт
     cache = Cache(
         path=Path(config.cache.path).expanduser(),
         ttl_seconds=config.cache.ttl_seconds,
@@ -238,10 +235,10 @@ def scan(
             report = asyncio.run(build_report(supported, unsupported, path, cache))
             progress.update(task_id, completed=1)
     finally:
-        # Кеш открывает SQLite-соединение, поэтому его лучше закрыть явно.
+        # кеш открывает SQLite-соединение, закрываем явно
         cache.close()
 
-    # Шаг 3: если нужен advice/full, просим LLM написать рекомендации.
+    # шаг 3: если нужен advice/full, просим LLM написать рекомендации
     advice: str | None = None
 
     if mode in ("advice", "full"):
@@ -263,13 +260,12 @@ def scan(
 
             progress.update(task_id, completed=1)
 
-    # Шаг 4: собираем финальный отчёт и либо печатаем его, либо сохраняем.
+    # шаг 4: собираем финальный отчёт, печатаем или сохраняем
     if mode in ("advice", "full"):
-        # В LLM-режимах отчёт сохраняем в файл.
-        # Так удобнее, потому что рекомендации могут быть длинными.
+        # в LLM-режимах отчёт сохраняем в файл — рекомендации могут быть длинными
         save_path = save or "tech-upd-report.md"
 
-        # Если пользователь не указал --save, по умолчанию сохраняем Markdown.
+        # если --save не указан, по умолчанию сохраняем Markdown
         save_fmt = output if save else "markdown"
 
         text = render_report(
@@ -283,7 +279,7 @@ def scan(
         Path(save_path).write_text(text, encoding="utf-8")
         click.echo(f"Все рекомендации записаны в {save_path}", err=True)
     else:
-        # В обычном режиме просто печатаем отчёт в консоль.
+        # обычный режим — печатаем отчёт в консоль
         text = render_report(
             report,
             fmt=output,
@@ -292,7 +288,7 @@ def scan(
 
         click.echo(text)
 
-        # Но если пользователь дал --save, дополнительно сохраняем в файл.
+        # если есть --save, дополнительно сохраняем в файл
         if save:
             Path(save).write_text(text, encoding="utf-8")
             click.echo(f"Saved to {save}", err=True)
@@ -305,7 +301,7 @@ def main() -> None:
         cli(standalone_mode=False)
 
     except click.exceptions.UsageError as exc:
-        # Ошибки в аргументах Click умеет красиво показывать сам.
+        # ошибки в аргументах Click умеет красиво показывать сам
         exc.show()
         sys.exit(exc.exit_code)
 
@@ -334,12 +330,12 @@ def main() -> None:
         sys.exit(130)
 
     except SystemExit:
-        # Не мешаем Click нормально обрабатывать --help, --version и похожие случаи.
+        # не мешаем Click обрабатывать --help, --version и похожие случаи
         raise
 
     except Exception as exc:
-        # Для неожиданных ошибок без --verbose показываем короткое сообщение.
-        # А с --verbose даём обычный traceback, чтобы было проще дебажить.
+        # без --verbose показываем короткое сообщение,
+        # с --verbose даём обычный traceback — проще дебажить
         if _VERBOSE_FLAG["value"]:
             raise
 

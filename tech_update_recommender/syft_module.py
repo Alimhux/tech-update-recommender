@@ -19,10 +19,7 @@ from tech_update_recommender.models import PackageInfo
 logger = logging.getLogger(__name__)
 
 
-# --- ошибки ---------------------------------------------------------------
-#
-# Все исключения наследуются от SyftError, чтобы в CLI можно было
-# ловить одним except.
+# ошибки. Все наследуются от SyftError, чтобы CLI ловил одним except
 
 
 class SyftError(Exception):
@@ -41,11 +38,9 @@ class SyftParseError(SyftError):
     """syft вернул что-то, что мы не смогли распарсить."""
 
 
-# --- какие экосистемы умеет deps.dev --------------------------------------
-#
-# Ключ — purl type, который кладёт в SBOM сам syft, значение — то,
-# как этот же менеджер пакетов называется в API deps.dev. Всё, что
-# не в этом словаре, помечаем как unsupported и просто пишем в отчёт.
+# какие экосистемы умеет deps.dev.
+# Ключ — purl type из SBOM от syft, значение — имя того же менеджера
+# в API deps.dev. Всё, что не в словаре, помечаем unsupported.
 
 
 SUPPORTED_ECOSYSTEMS: dict[str, str] = {
@@ -59,7 +54,7 @@ SUPPORTED_ECOSYSTEMS: dict[str, str] = {
 }
 
 
-# --- поиск бинарника ------------------------------------------------------
+# поиск бинарника
 
 
 _SYFT_INSTALL_HINT = (
@@ -69,9 +64,9 @@ _SYFT_INSTALL_HINT = (
 
 
 def find_syft_binary(custom_path: str | None) -> str:
-    # Если пользователь явно указал путь (через --syft-path или конфиг) —
-    # доверяем ему, только проверяем, что файл вообще существует. Иначе —
-    # обычный поиск по PATH через shutil.which.
+    # если пользователь явно указал путь (через --syft-path или конфиг) —
+    # доверяем, только проверяем что файл существует.
+    # Иначе обычный поиск по PATH через shutil.which
 
     if custom_path:
         path = Path(custom_path)
@@ -86,14 +81,14 @@ def find_syft_binary(custom_path: str | None) -> str:
     raise SyftNotFoundError(_SYFT_INSTALL_HINT)
 
 
-# --- запуск syft ----------------------------------------------------------
+# запуск syft
 
 
 def run_syft(project_path: str, syft_binary: str) -> Path:
-    # Гоняем syft на каталоге, формат — cyclonedx-json. stdout пишем
+    # гоняем syft на каталоге, формат — cyclonedx-json. stdout пишем
     # сразу в файл (через NamedTemporaryFile, чтобы не держать большой
     # вывод в памяти — для крупных проектов это десятки мегабайт).
-    # Файл не удаляем — за это отвечает scan_project.
+    # Файл не удаляем — за это отвечает scan_project
 
     logger.info("running syft on %s...", project_path)
 
@@ -124,18 +119,15 @@ def run_syft(project_path: str, syft_binary: str) -> Path:
     return tmp_path
 
 
-# --- разбор CycloneDX-JSON ------------------------------------------------
+# разбор CycloneDX-JSON
 
 
 def _build_name(purl: PackageURL) -> str:
-    # У maven «имя» пакета — это пара groupId:artifactId, namespace
-    # без artifactId бессмысленен. У остальных менеджеров purl.name —
-    # уже готовое имя.
-    #
+    # у maven "имя" — это пара groupId:artifactId, namespace без artifactId
+    # бессмысленен. У остальных purl.name — уже готовое имя.
     # Про go: deps.dev хочет полный путь модуля (github.com/foo/bar),
-    # но syft и так кладёт его в purl.name, ничего отдельно собирать
-    # не нужно. Если когда-нибудь syft начнёт класть туда что-то
-    # другое — этот код придётся править.
+    # syft и так кладёт его в purl.name. Если когда-то syft начнёт класть
+    # туда что-то другое — этот код придётся править
 
     if purl.type == "maven" and purl.namespace:
         return f"{purl.namespace}:{purl.name}"
@@ -143,9 +135,9 @@ def _build_name(purl: PackageURL) -> str:
 
 
 def parse_cyclonedx(json_path: Path) -> list[PackageInfo]:
-    # Открываем CycloneDX и бежим по components. Битый JSON или
-    # недоступный файл — фатально (SyftParseError). А вот отдельные
-    # компоненты без purl или с кривым purl просто пропускаем
+    # открываем CycloneDX и бежим по components. Битый JSON или
+    # недоступный файл — фатально (SyftParseError). А отдельные компоненты
+    # без purl или с кривым purl просто пропускаем
 
     try:
         with open(json_path, encoding="utf-8") as fh:
@@ -161,8 +153,8 @@ def parse_cyclonedx(json_path: Path) -> list[PackageInfo]:
     for component in components:
         purl_str = component.get("purl")
         if not purl_str:
-            # Так бывает, например, для компонентов типа "operating-system" —
-            # они описывают саму ОС, нас не интересуют.
+            # бывает для компонентов типа "operating-system" — они описывают
+            # саму ОС, нас не интересуют
             logger.debug(
                 "skipping component without purl: %s",
                 component.get("name", "<unnamed>"),
@@ -176,8 +168,8 @@ def parse_cyclonedx(json_path: Path) -> list[PackageInfo]:
             continue
 
         if not purl.name or not purl.version:
-            # Без имени или версии пакет всё равно бесполезен — в deps.dev
-            # с такими данными мы ничего не запросим.
+            # без имени или версии пакет бесполезен — в deps.dev с такими
+            # данными мы ничего не запросим
             logger.debug(
                 "skipping component with incomplete purl (no name/version): %s",
                 purl_str,
@@ -196,14 +188,13 @@ def parse_cyclonedx(json_path: Path) -> list[PackageInfo]:
     return packages
 
 
-# --- разделение supported / unsupported -----------------------------------
+# разделение supported / unsupported
 
 
 def _dedup(packages: list[PackageInfo]) -> list[PackageInfo]:
-    # syft периодически выдаёт один и тот же пакет дважды: например,
-    # если он встречается и в lock-файле, и в package.json. Считаем
-    # одинаковыми те, у которых совпадает экосистема + имя + версия.
-    # Порядок первого вхождения сохраняем — это удобно для тестов.
+    # syft периодически выдаёт один пакет дважды (например, и в lock-файле,
+    # и в package.json). Считаем одинаковыми те, у кого совпадает
+    # экосистема + имя + версия. Порядок первого вхождения сохраняем
 
     seen: set[tuple[str, str, str]] = set()
     result: list[PackageInfo] = []
@@ -219,9 +210,9 @@ def _dedup(packages: list[PackageInfo]) -> list[PackageInfo]:
 def split_supported(
     packages: list[PackageInfo],
 ) -> tuple[list[PackageInfo], list[PackageInfo]]:
-    # Раскидываем пакеты по двум корзинам. Дедупликация — отдельно
-    # внутри каждой, чтобы случайный системный дубликат не вытеснил
-    # реальный supported-пакет.
+    # раскидываем пакеты по двум корзинам. Дедупликация отдельно внутри
+    # каждой, чтобы случайный системный дубликат не вытеснил реальный
+    # supported-пакет
 
     supported: list[PackageInfo] = []
     unsupported: list[PackageInfo] = []
@@ -234,24 +225,24 @@ def split_supported(
     return _dedup(supported), _dedup(unsupported)
 
 
-# --- внешний API ---------------------------------------------------------
+# внешний API
 
 
 def scan_project(
     project_path: str,
     syft_path: str | None = None,
 ) -> tuple[list[PackageInfo], list[PackageInfo]]:
-    # Главная функция модуля: найти syft, запустить, распарсить,
-    # разложить по корзинам — и удалить за собой временный файл.
-    # Результат сразу готов к передаче в depsdev_module.build_report.
+    # главная функция модуля: найти syft, запустить, распарсить,
+    # разложить по корзинам и удалить за собой временный файл.
+    # Результат сразу готов к передаче в depsdev_module.build_report
 
     binary = find_syft_binary(syft_path)
     sbom_path = run_syft(project_path, binary)
     try:
         packages = parse_cyclonedx(sbom_path)
     finally:
-        # Если удалить не получилось — не страшно, ОС всё равно
-        # подметёт временную папку. Поэтому только debug-лог.
+        # если удалить не получилось — не страшно, ОС всё равно подметёт
+        # временную папку. Поэтому только debug-лог
         try:
             sbom_path.unlink()
         except OSError:

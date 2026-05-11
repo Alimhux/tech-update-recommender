@@ -9,7 +9,7 @@ from pydantic import SecretStr
 
 from tech_update_recommender.config import Config, load_config
 
-# Изоляция от пользовательских env vars LLM
+# изолируемся от пользовательских env vars LLM
 LLM_ENV_VARS = (
     "TUR_LLM_MODEL",
     "TUR_LLM_API_KEY",
@@ -137,7 +137,7 @@ def test_malformed_yaml_falls_back_to_defaults(tmp_path: Path) -> None:
     yaml_path = tmp_path / "broken.yaml"
     yaml_path.write_text("llm: [this is not: valid", encoding="utf-8")
     cfg = load_config(cli_overrides={}, config_path=yaml_path)
-    # Должны получить дефолты, без падения.
+    # получаем дефолты без падения
     assert cfg.llm.model is None
 
 

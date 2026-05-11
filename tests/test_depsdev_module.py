@@ -1,7 +1,7 @@
 """Тесты DepsDevModule.
 
-Все HTTP моки идут через ``aioresponses``. Никаких реальных запросов
-в сеть. Кеш создаётся в ``tmp_path``, чтобы не трогать ``~/.cache``.
+Все HTTP моки через ``aioresponses``, никаких реальных запросов.
+Кеш создаётся в ``tmp_path``, чтобы не трогать ``~/.cache``.
 """
 
 from __future__ import annotations
@@ -34,9 +34,7 @@ from tech_update_recommender.utils import (
     url_encode_package_name,
 )
 
-# ---------------------------------------------------------------------------
-# Помогалки
-# ---------------------------------------------------------------------------
+# помогалки
 
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -54,7 +52,7 @@ def cache(tmp_path: Path) -> Cache:
 
 @pytest.fixture(autouse=True)
 def _no_real_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Заменяем _sleep на no-op, чтобы retry-тесты летали мгновенно."""
+    """Меняем _sleep на no-op, чтобы retry-тесты летали мгновенно."""
 
     async def _instant(_seconds: float) -> None:
         return None
@@ -62,9 +60,7 @@ def _no_real_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(depsdev_module, "_sleep", _instant)
 
 
-# ---------------------------------------------------------------------------
 # compute_semver_diff
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -74,13 +70,13 @@ def _no_real_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
         ("1.2.3", "1.3.0", "minor"),
         ("1.2.3", "1.2.4", "patch"),
         ("1.2.3", "1.2.3", None),
-        # Невалидная версия (например, latest=None или мусор) — None
+        # невалидная версия (latest=None или мусор) — None
         ("not-a-version", "1.0.0", None),
         ("1.0.0", "garbage", None),
-        # Maven-стиль (4-сегментные релизы)
+        # maven-стиль (4-сегментные релизы)
         ("5.3.10", "6.0.0", "major"),
         ("5.3.10", "5.3.20", "patch"),
-        # Pre-release всё ещё ловится packaging.Version
+        # pre-release ловится packaging.Version
         ("1.0.0", "1.0.1rc1", "patch"),
     ],
 )
@@ -88,9 +84,7 @@ def test_compute_semver_diff(current: str, latest: str, expected: str | None) ->
     assert compute_semver_diff(current, latest) == expected
 
 
-# ---------------------------------------------------------------------------
-# Нормализация имён
-# ---------------------------------------------------------------------------
+# нормализация имён
 
 
 def test_normalize_pypi_name() -> None:
@@ -101,7 +95,7 @@ def test_normalize_pypi_name() -> None:
 
 def test_url_encode_maven() -> None:
     encoded = url_encode_package_name("MAVEN", "org.springframework:spring-core")
-    # ``:`` должен быть закодирован, ``.`` — нет (он в unreserved).
+    # ``:`` кодируется, ``.`` — нет (он в unreserved)
     assert "%3A" in encoded
     assert encoded == "org.springframework%3Aspring-core"
 
@@ -117,14 +111,12 @@ def test_canonical_name_golang_uses_namespace() -> None:
         purl="pkg:golang/github.com%2Ffoo/bar@1.0.0",
         ecosystem="golang",
     )
-    # PackageURL декодирует namespace, ожидаем "github.com/foo/bar".
+    # PackageURL декодирует namespace, ожидаем "github.com/foo/bar"
     canonical = _canonical_name(pkg, "GO")
     assert canonical == "github.com/foo/bar"
 
 
-# ---------------------------------------------------------------------------
-# fetch_current_versions: batch payload + парсинг ответа
-# ---------------------------------------------------------------------------
+# fetch_current_versions: batch payload и парсинг ответа
 
 
 async def test_fetch_current_versions_batch() -> None:
@@ -151,7 +143,7 @@ async def test_fetch_current_versions_batch() -> None:
         async with aiohttp.ClientSession() as session:
             result = await fetch_current_versions(session, packages)
 
-    # Проверяем, что наш payload содержит правильные системы и нормализованное имя PyPI.
+    # в payload должны быть правильные системы и нормализованное имя PyPI
     request_calls = mocked.requests[("POST", _yarl(DEPSDEV_BATCH_URL))]
     assert len(request_calls) == 1
     sent_payload = request_calls[0].kwargs["json"]
@@ -162,7 +154,7 @@ async def test_fetch_current_versions_batch() -> None:
     assert "flask-babel" in sent_names
     assert "Flask-Babel" not in sent_names
 
-    # Результат содержит ключ для express и flask-babel
+    # результат содержит ключ для express и flask-babel
     assert ("NPM", "express", "4.18.2") in result
     assert ("PYPI", "flask-babel", "2.0.0") in result
 
@@ -175,13 +167,11 @@ def _yarl(url: str):
     return URL(url)
 
 
-# ---------------------------------------------------------------------------
 # fetch_latest_versions: дедупликация, 404, retry
-# ---------------------------------------------------------------------------
 
 
 async def test_fetch_latest_versions_dedup() -> None:
-    """Два пакета express разных версий → один HTTP-запрос."""
+    """Два пакета express разных версий: один HTTP-запрос."""
 
     fixture = _load_fixture("depsdev_getpackage_express.json")
 
@@ -208,11 +198,11 @@ async def test_fetch_latest_versions_dedup() -> None:
         async with aiohttp.ClientSession() as session:
             result = await fetch_latest_versions(session, pkgs)
 
-    # Один запрос на пару (NPM, express)
+    # один запрос на пару (NPM, express)
     calls = mocked.requests[("GET", _yarl(url))]
     assert len(calls) == 1
 
-    # latest = isDefault: true → 4.21.0
+    # latest берётся по isDefault: true, это 4.21.0
     assert result == {("NPM", "express"): "4.21.0"}
 
 
@@ -237,7 +227,7 @@ async def test_404_handling() -> None:
 
 
 async def test_retry_on_5xx() -> None:
-    """503, 503, 200 → success."""
+    """503, 503, 200 — должно отработать успешно."""
 
     fixture = _load_fixture("depsdev_getpackage_express.json")
     pkgs = [
@@ -262,7 +252,7 @@ async def test_retry_on_5xx() -> None:
 
 
 async def test_retry_exhausted_raises() -> None:
-    """Три подряд 503 → DepsDevError."""
+    """Три 503 подряд, ждём DepsDevError."""
 
     pkgs = [
         PackageInfo(
@@ -283,9 +273,7 @@ async def test_retry_exhausted_raises() -> None:
                 await fetch_latest_versions(session, pkgs)
 
 
-# ---------------------------------------------------------------------------
-# Кеш
-# ---------------------------------------------------------------------------
+# кеш
 
 
 def test_cache_get_set_clear(cache: Cache) -> None:
@@ -301,7 +289,7 @@ def test_cache_ttl_expiry(tmp_path: Path) -> None:
 
     c = Cache(tmp_path / "ttl.db", ttl_seconds=0)
     c.set("NPM", "express", "4.18.2", {"x": 1})
-    # ttl=0 → любая запись считается протухшей сразу же.
+    # ttl=0, любая запись протухает сразу
     assert c.get("NPM", "express", "4.18.2") is None
 
 
@@ -315,20 +303,20 @@ async def test_cache_hit_skips_http(cache: Cache, tmp_path: Path) -> None:
         ecosystem="npm",
     )
 
-    # Сидим версию и latest в кеш.
+    # кладём версию и latest в кеш
     cache.set("NPM", "express", "4.18.2", {"versionKey": {"system": "NPM"}})
     cache.set("NPM", "express", _LATEST_KEY, {"latest": "4.21.0"})
 
     with aioresponses() as mocked:
-        # Никаких mocked.get/post — если build_report попытается достучаться,
-        # aioresponses бросит ConnectionError.
+        # никаких mocked.get/post — если build_report попытается достучаться,
+        # aioresponses бросит ConnectionError
         report = await build_report(
             supported=[pkg],
             unsupported=[],
             project_path=str(tmp_path),
             cache=cache,
         )
-        # Никаких запросов не сделано.
+        # ни одного запроса
         assert mocked.requests == {}
 
     assert len(report.supported) == 1
@@ -338,9 +326,7 @@ async def test_cache_hit_skips_http(cache: Cache, tmp_path: Path) -> None:
     assert dep.semver_diff == "minor"
 
 
-# ---------------------------------------------------------------------------
-# Парсинг advisories
-# ---------------------------------------------------------------------------
+# парсинг advisories
 
 
 def test_advisory_parsing_advisorykeys() -> None:
@@ -387,9 +373,7 @@ def test_advisory_parsing_empty() -> None:
     assert _parse_advisories({"advisoryKeys": []}) == []
 
 
-# ---------------------------------------------------------------------------
 # _pick_latest_version
-# ---------------------------------------------------------------------------
 
 
 def test_pick_latest_version_isdefault() -> None:
@@ -418,9 +402,7 @@ def test_pick_latest_version_empty() -> None:
     assert _pick_latest_version({}) is None
 
 
-# ---------------------------------------------------------------------------
 # build_report — интеграция: batch + GetPackage + summary
-# ---------------------------------------------------------------------------
 
 
 async def test_build_report_summary(cache: Cache, tmp_path: Path) -> None:
@@ -511,12 +493,12 @@ async def test_build_report_summary(cache: Cache, tmp_path: Path) -> None:
             cache=cache,
         )
 
-    # Сводка
+    # сводка
     assert report.total_packages == 4  # 3 supported + 1 unsupported
     assert report.outdated_count == 2  # express, flask-babel
-    assert report.vulnerable_count == 1  # express имеет advisoryKeys
+    assert report.vulnerable_count == 1  # у express есть advisoryKeys
 
-    # Конкретика
+    # конкретика
     by_name = {r.name: r for r in report.supported}
     assert by_name["express"].latest_version == "4.21.0"
     assert by_name["express"].is_outdated is True
@@ -539,7 +521,7 @@ async def test_build_report_chunks_batch_above_5000(
 ) -> None:
     """Если пакетов > BATCH_CHUNK_SIZE — делаем несколько POST-запросов."""
 
-    # Понижаем лимит, чтобы тест летал.
+    # понижаем лимит, чтобы тест летал
     monkeypatch.setattr(depsdev_module, "BATCH_CHUNK_SIZE", 2)
 
     pkgs = [
@@ -553,10 +535,10 @@ async def test_build_report_chunks_batch_above_5000(
     ]
 
     with aioresponses() as mocked:
-        # repeat=True — один и тот же mocked response ловит все три запроса.
+        # repeat=True — один mocked response ловит все три запроса
         mocked.post(DEPSDEV_BATCH_URL, payload={"responses": []}, repeat=True)
         # GetPackage: для каждого уникального имени — отдельный URL,
-        # все возвращают один и тот же ответ.
+        # все возвращают один и тот же ответ
         for i in range(5):
             mocked.get(
                 DEPSDEV_PACKAGE_URL_TPL.format(system="NPM", name=f"pkg{i}"),
@@ -566,13 +548,13 @@ async def test_build_report_chunks_batch_above_5000(
         async with aiohttp.ClientSession() as session:
             await fetch_current_versions(session, pkgs)
 
-        # 5 пакетов / chunk=2 → ceil(5/2) = 3 POST-запроса.
+        # 5 пакетов при chunk=2: ceil(5/2) = 3 POST-запроса
         calls = mocked.requests[("POST", _yarl(DEPSDEV_BATCH_URL))]
         assert len(calls) == 3
 
 
 async def test_build_report_unknown_package_no_latest(cache: Cache, tmp_path: Path) -> None:
-    """Пакет, по которому 404 → latest_version=None, is_outdated=False."""
+    """Пакет, по которому 404: latest_version=None, is_outdated=False."""
 
     pkg = PackageInfo(
         name="nonexistent",
@@ -605,8 +587,8 @@ async def test_build_report_unknown_package_no_latest(cache: Cache, tmp_path: Pa
 
 
 async def test_build_report_invalid_version_string(cache: Cache, tmp_path: Path) -> None:
-    """Невалидная (не-SemVer) текущая версия → semver_diff=None,
-    is_outdated=True (т. к. строки не равны)."""
+    """Невалидная (не-SemVer) текущая версия: semver_diff=None,
+    is_outdated=True (потому что строки не равны)."""
 
     pkg = PackageInfo(
         name="weird-pkg",

@@ -1,8 +1,8 @@
 """Тесты SyftModule (блок 2).
 
-Все тест-кейсы используют заранее подготовленные CycloneDX-фикстуры
-в ``tests/fixtures/``. Реальный бинарник syft не запускается:
-``find_syft_binary`` и ``run_syft`` тестируются через моки.
+Используем заранее подготовленные CycloneDX-фикстуры из ``tests/fixtures/``.
+Реальный бинарник syft не запускается — ``find_syft_binary`` и ``run_syft``
+тестируются через моки.
 """
 
 from __future__ import annotations
@@ -32,9 +32,7 @@ from tech_update_recommender.syft_module import (
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
-# ---------------------------------------------------------------------------
-# Smoke
-# ---------------------------------------------------------------------------
+# smoke
 
 
 def test_syft_module_importable() -> None:
@@ -44,7 +42,7 @@ def test_syft_module_importable() -> None:
 
 
 def test_supported_ecosystems_keys() -> None:
-    """Константа должна содержать ровно 7 экосистем deps.dev."""
+    """В константе ровно 7 экосистем deps.dev."""
 
     assert set(SUPPORTED_ECOSYSTEMS) == {
         "npm",
@@ -64,9 +62,7 @@ def test_exception_hierarchy() -> None:
         assert issubclass(exc_cls, SyftError)
 
 
-# ---------------------------------------------------------------------------
 # parse_cyclonedx
-# ---------------------------------------------------------------------------
 
 
 def test_parse_simple() -> None:
@@ -110,14 +106,14 @@ def test_empty_components() -> None:
 
 
 def test_broken_json() -> None:
-    """Невалидный JSON → ``SyftParseError``."""
+    """Невалидный JSON, ждём ``SyftParseError``."""
 
     with pytest.raises(SyftParseError):
         parse_cyclonedx(FIXTURES / "cyclonedx_broken.json")
 
 
 def test_parse_skips_components_without_purl(tmp_path: Path) -> None:
-    """Компоненты без поля ``purl`` пропускаются, остальные обрабатываются."""
+    """Компоненты без поля ``purl`` пропускаем, остальные обрабатываем."""
 
     sbom = {
         "bomFormat": "CycloneDX",
@@ -139,13 +135,11 @@ def test_parse_skips_components_without_purl(tmp_path: Path) -> None:
     assert packages[0].name == "express"
 
 
-# ---------------------------------------------------------------------------
 # split_supported
-# ---------------------------------------------------------------------------
 
 
 def test_split_supported_unsupported() -> None:
-    """npm/pypi → supported, deb → unsupported."""
+    """npm/pypi идут в supported, deb — в unsupported."""
 
     packages = parse_cyclonedx(FIXTURES / "cyclonedx_mixed.json")
     supported, unsupported = split_supported(packages)
@@ -235,13 +229,11 @@ def test_split_preserves_order() -> None:
     assert [p.name for p in supported] == ["b", "a"]
 
 
-# ---------------------------------------------------------------------------
 # find_syft_binary
-# ---------------------------------------------------------------------------
 
 
 def test_syft_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``shutil.which`` → None и нет ``custom_path`` → ``SyftNotFoundError``."""
+    """``shutil.which`` вернул None и нет ``custom_path``: ждём ``SyftNotFoundError``."""
 
     monkeypatch.setattr(syft_module.shutil, "which", lambda _: None)
 
@@ -273,7 +265,7 @@ def test_find_syft_binary_uses_custom_path(tmp_path: Path) -> None:
 
 
 def test_find_syft_binary_custom_path_missing(tmp_path: Path) -> None:
-    """Несуществующий ``custom_path`` → ``SyftNotFoundError``."""
+    """Несуществующий ``custom_path``: ждём ``SyftNotFoundError``."""
 
     missing = tmp_path / "does-not-exist-syft"
 
@@ -281,13 +273,11 @@ def test_find_syft_binary_custom_path_missing(tmp_path: Path) -> None:
         find_syft_binary(str(missing))
 
 
-# ---------------------------------------------------------------------------
 # run_syft
-# ---------------------------------------------------------------------------
 
 
 def test_syft_nonzero_exit(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Ненулевой код возврата → ``SyftExecutionError`` с stderr в сообщении."""
+    """Ненулевой код возврата даёт ``SyftExecutionError`` с stderr в сообщении."""
 
     def fake_run(args, **kwargs):  # noqa: ANN001, ANN003
         return subprocess.CompletedProcess(
@@ -304,7 +294,7 @@ def test_syft_nonzero_exit(monkeypatch: pytest.MonkeyPatch) -> None:
 
     msg = str(excinfo.value)
     assert "permission denied" in msg
-    assert "1" in msg  # код возврата фигурирует
+    assert "1" in msg  # код возврата на месте
 
 
 def test_run_syft_success_writes_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -338,13 +328,11 @@ def test_run_syft_success_writes_file(monkeypatch: pytest.MonkeyPatch, tmp_path:
     ]
 
 
-# ---------------------------------------------------------------------------
-# scan_project — интеграция всех шагов с мокированием subprocess+which
-# ---------------------------------------------------------------------------
+# scan_project — интеграция всех шагов с моками subprocess+which
 
 
 def test_scan_project_pipeline(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Полный pipeline: find → run → parse → split (с моками)."""
+    """Полный pipeline: find, run, parse, split (с моками)."""
 
     sbom_text = (FIXTURES / "cyclonedx_mixed.json").read_text(encoding="utf-8")
 

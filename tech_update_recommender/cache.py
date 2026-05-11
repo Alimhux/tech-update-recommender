@@ -1,14 +1,12 @@
-"""Небольшой SQLite-кеш для ответов deps.dev с TTL.
+"""Маленький SQLite-кеш для ответов deps.dev с TTL.
 
-Тут мы сохраняем JSON-ответы по ключу (system, name, version),
-чтобы не ходить в API каждый раз заново.
+Сохраняем JSON-ответы по ключу (system, name, version), чтобы не ходить
+в API каждый раз заново. Для GetPackage используется специальная
+"версия" "__latest__" — там нам нужна последняя версия пакета.
 
-Для GetPackage используется специальная версия "__latest__",
-потому что там нужна последняя версия пакета.
-
-Кеш рассчитан на работу в одном event loop, поэтому отдельная
-потокобезопасность тут не нужна. Соединение с SQLite открывается
-при создании объекта и закрывается через close() или при удалении.
+Кеш рассчитан на один event loop, потокобезопасность не нужна.
+Соединение с SQLite открывается при создании и закрывается через close()
+или при удалении объекта.
 """
 
 from __future__ import annotations
@@ -26,26 +24,24 @@ _LATEST_KEY = "__latest__"
 
 
 class Cache:
-    """Простой SQLite-кеш с временем жизни записей.
+    """SQLite-кеш с временем жизни записей.
 
-    Сюда можно положить любой JSON-сериализуемый payload.
-    Запись ищется по ключу (system, name, version).
-
-    Если запись лежит дольше ttl_seconds, считаем её устаревшей
-    и get() вернёт None.
+    Можно положить любой JSON-сериализуемый payload. Запись ищется
+    по ключу (system, name, version). Если запись лежит дольше
+    ttl_seconds, считаем её устаревшей и get() вернёт None.
     """
 
     def __init__(self, path: Path, ttl_seconds: int = 3600) -> None:
         self.path = Path(path)
         self.ttl_seconds = ttl_seconds
 
-        # На всякий случай создаём папку для файла кеша.
+        # на всякий случай создаём папку для файла кеша
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Открываем соединение с SQLite. Оно живёт, пока живёт объект Cache.
+        # соединение с SQLite живёт пока живёт объект Cache
         self._conn = sqlite3.connect(str(self.path))
 
-        # Создаём таблицу, если кеш запускается первый раз.
+        # создаём таблицу при первом запуске
         self._conn.execute(
             """
             CREATE TABLE IF NOT EXISTS entries (
@@ -60,9 +56,7 @@ class Cache:
         )
         self._conn.commit()
 
-    # ------------------------------------------------------------------
-    # Основные операции с кешем
-    # ------------------------------------------------------------------
+    # основные операции
 
     def get(self, system: str, name: str, version: str) -> dict | None:
         """Достаём запись из кеша, если она есть и ещё не устарела."""
@@ -73,22 +67,22 @@ class Cache:
         )
         row = cur.fetchone()
 
-        # Ничего не нашли — значит, кеша для такого ключа нет.
+        # ничего не нашли — кеша для такого ключа нет
         if not row:
             return None
 
         payload_text, fetched_at = row
 
-        # Если запись слишком старая, просто считаем, что её нет.
+        # запись слишком старая — считаем, что её нет
         if time.time() - fetched_at > self.ttl_seconds:
             logger.debug("cache MISS (stale) for %s/%s/%s", system, name, version)
             return None
 
-        # payload хранится строкой, поэтому пробуем превратить его обратно в dict.
+        # payload хранится строкой, превращаем обратно в dict
         try:
             return json.loads(payload_text)
         except json.JSONDecodeError:
-            # Если JSON почему-то сломан, не падаем, а просто игнорируем запись.
+            # JSON сломан — не падаем, просто игнорируем запись
             logger.warning(
                 "cache: corrupted JSON for %s/%s/%s, ignoring",
                 system,
@@ -98,11 +92,11 @@ class Cache:
             return None
 
     def set(self, system: str, name: str, version: str, payload: dict) -> None:
-        """Кладём запись в кеш или обновляем уже существующую."""
+        """Кладём запись в кеш или обновляем существующую."""
 
         payload_text = json.dumps(payload)
 
-        # Если такой ключ уже есть, SQLite обновит payload и время получения.
+        # если такой ключ уже есть — SQLite обновит payload и время
         self._conn.execute(
             "INSERT INTO entries (system, name, version, payload, fetched_at) "
             "VALUES (?, ?, ?, ?, ?) "
@@ -118,9 +112,7 @@ class Cache:
         self._conn.execute("DELETE FROM entries")
         self._conn.commit()
 
-    # ------------------------------------------------------------------
-    # Вспомогательные методы
-    # ------------------------------------------------------------------
+    # вспомогательное
 
     def close(self) -> None:
         """Закрываем соединение с базой."""
@@ -128,12 +120,12 @@ class Cache:
         try:
             self._conn.close()
         except sqlite3.Error:
-            # Если при закрытии что-то пошло не так, просто игнорируем.
-            # Тут уже особо нечего спасать.
+            # при закрытии что-то пошло не так — игнорируем,
+            # тут особо нечего спасать
             pass
 
     def __del__(self) -> None:  # pragma: no cover - best-effort cleanup
-        # Запасной вариант закрытия соединения, если close() забыли вызвать вручную.
+        # запасной вариант, если close() забыли вызвать руками
         self.close()
 
 

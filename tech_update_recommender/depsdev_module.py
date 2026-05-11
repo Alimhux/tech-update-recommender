@@ -1,14 +1,11 @@
-"""
-depsdev module - это модуль для взаимодействия системы с API от deps.dev
+"""Взаимодействие с API deps.dev.
 
-Модуль запрашивает у deps.dev информацию о последних версиях пакетов,
-найдённых в анализируемом проекте, и о наличии у них известных уязвимостей.
-Эти данные нужны для построения рекомендаций по обновлению зависимостей.
+Запрашиваем последние версии пакетов и их известные уязвимости.
+Эти данные нужны для рекомендаций по обновлению.
 
-Модуль использует SQLite-кеш, чтобы не обращаться к API при повторных
-запусках, а также сводит результаты в FullReport из models.py
-
-Все HTTP-запросы асинхронные, работают через aiohttp
+Есть SQLite-кеш, чтобы не ходить в API при повторных запусках.
+Результаты сводим в FullReport из models.py.
+Все HTTP-запросы асинхронные через aiohttp.
 """
 
 from __future__ import annotations
@@ -47,15 +44,13 @@ BATCH_CHUNK_SIZE = 5000
 GETPACKAGE_CONCURRENCY = 20
 
 
-# Исключения
+# исключения
 class DepsDevError(Exception):
     """Базовое исключение DepsDevModule."""
 
 
-# ---------------------------------------------------------------------------
-# Внутренние утилиты: retry + sleep (sleep — отдельной функцией, чтобы
-# тесты могли мокать без реальной задержки)
-# ---------------------------------------------------------------------------
+# внутренние утилиты: retry + sleep. sleep вынесен отдельной функцией,
+# чтобы тесты могли мокать без реальной задержки
 
 
 async def _sleep(seconds: float) -> None:
@@ -70,8 +65,9 @@ async def _with_retry(
     retries: int = MAX_RETRIES,
     label: str = "request",
 ) -> aiohttp.ClientResponse:
-    """Выполнить async-операцию с retry на 5xx и сетевые ошибки, либо прокидываем
-    DepsDevError если все попытки упали с сетевой ошибкой.
+    """Async-операция с retry на 5xx и сетевые ошибки.
+
+    Если все попытки упали — бросаем DepsDevError.
     """
 
     last_exc: Exception | None = None
@@ -117,12 +113,12 @@ async def _with_retry(
     raise DepsDevError(f"deps.dev API недоступен после {retries} попыток: {last_exc}")
 
 
-# 3.2 Batch-запрос текущих версий
+# batch-запрос текущих версий
 def _batch_request_payload(packages: list[PackageInfo]) -> dict:
     """Собирает payload для POST /v3alpha/versionbatch.
 
-    Имя пакета в payload передаётся в каноничной для deps.dev форме:
-    модули от pypi — нормализуются, остальные — используются как есть.
+    Имя пакета передаётся в каноничной для deps.dev форме:
+    pypi нормализуется, остальные идут как есть.
     """
 
     requests = []
@@ -142,14 +138,14 @@ def _batch_request_payload(packages: list[PackageInfo]) -> dict:
 
 
 def _canonical_name(package: PackageInfo, system: str) -> str:
-    """Преобразует в каноничное имя пакета для deps.dev (для payload и ключа кеша)."""
+    """Каноничное имя пакета для deps.dev (для payload и ключа кеша)."""
 
     if system == "PYPI":
         return normalize_pypi_name(package.name)
 
     if system == "GO":
         # SyftModule сохраняет в .name только purl.name без namespace.
-        # Для go нам нужен полный путь модуля, так что читаем его из purl.
+        # Для go нужен полный путь модуля — читаем его из purl
         try:
             purl = PackageURL.from_string(package.purl)
         except ValueError:
@@ -166,10 +162,10 @@ async def fetch_current_versions(
     session: aiohttp.ClientSession,
     packages: list[PackageInfo],
 ) -> dict[tuple[str, str, str], dict | None]:
-    """Запросить через batch endpoint данные по текущим версиям пакетов.
+    """Запросить через batch endpoint данные по текущим версиям.
 
-    Возвращает словарь (system, name, version) : response_payload.
-    Ключ name в результате - каноничное имя
+    Возвращает (system, name, version) -> response_payload.
+    Ключ name — каноничное имя.
     """
 
     if not packages:
@@ -177,7 +173,7 @@ async def fetch_current_versions(
 
     result: dict[tuple[str, str, str], dict | None] = {}
 
-    # делаем чанки (хотя 5000 пакетов на запуск маловероятно — но требование).
+    # бьём на чанки (хотя 5000 пакетов за запуск маловероятно)
     for start in range(0, len(packages), BATCH_CHUNK_SIZE):
         chunk = packages[start : start + BATCH_CHUNK_SIZE]
         payload = _batch_request_payload(chunk)
@@ -199,7 +195,7 @@ async def fetch_current_versions(
             payload_for_key = entry.get("version")
             result[key] = payload_for_key
 
-        # Для пакетов из chunk, по которым нет ответа, явно ставим None.
+        # для пакетов из chunk, по которым нет ответа, явно ставим None
         for p in chunk:
             system = SUPPORTED_ECOSYSTEMS[p.ecosystem]
             name = _canonical_name(p, system)
@@ -225,7 +221,7 @@ def _extract_batch_key(entry: dict) -> tuple[str, str, str] | None:
     return system, name, version
 
 
-# 3.3 GetPackage для последних версий (latest)
+# GetPackage для последних версий (latest)
 
 
 async def fetch_latest_versions(
@@ -235,14 +231,14 @@ async def fetch_latest_versions(
     """Запросить последнюю версию для каждого уникального (system, name).
 
     Параллельность ограничена семафором (GETPACKAGE_CONCURRENCY).
-    Дедупликация идёт по каноническому имени (PyPI lowercase, Golang
-    namespace+name).
+    Дедуплицируем по каноническому имени (PyPI lowercase,
+    Golang namespace+name).
     """
 
     if not packages:
         return {}
 
-    # Дедупликация по ключу (system, canonical_name).
+    # дедуп по ключу (system, canonical_name)
     pairs: dict[tuple[str, str], None] = {}
     for p in packages:
         system = SUPPORTED_ECOSYSTEMS[p.ecosystem]
@@ -301,10 +297,10 @@ def _pick_latest_version(package_payload: dict) -> str | None:
     """Из ответа GetPackage выбрать строку latest-версии.
 
     Алгоритм:
-    1. Если есть запись с isDefault=True — берём её versionKey.version.
+    1. Запись с isDefault=True — берём её versionKey.version.
     2. Иначе сортируем по publishedAt (если есть) и берём максимум.
-    3. Иначе — последняя в массиве.
-    4. Если массив пуст — None.
+    3. Иначе берём последнюю в массиве.
+    4. Если массив пустой — None.
     """
 
     versions = package_payload.get("versions") or []
@@ -328,13 +324,13 @@ def _pick_latest_version(package_payload: dict) -> str | None:
         if ver:
             return ver
 
-    # 3. fallback: последняя
+    # 3. fallback — последняя
     last = versions[-1]
     vk = last.get("versionKey") or {}
     return vk.get("version")
 
 
-# 3.6 Построение полного отчёта
+# построение полного отчёта
 
 
 def _parse_advisories(version_payload: dict | None) -> list[Advisory]:
@@ -342,11 +338,11 @@ def _parse_advisories(version_payload: dict | None) -> list[Advisory]:
 
     deps.dev возвращает поле advisoryKeys со ссылками вида
     [{"id": "GHSA-xxxx"}]. Иногда встречается ``advisories`` со
-    структурой ``[{"id": ..., "summary": ..., "severity": ...}]``. Парсим
-    оба варианта.
+    структурой ``[{"id": ..., "summary": ..., "severity": ...}]``.
+    Парсим оба варианта.
 
     TODO: severity без второго запроса в /v3/advisories/{id} мы не знаем,
-    поэтому при отсутствии — оставляем 0.0 и summary="".
+    поэтому при отсутствии оставляем 0.0 и summary="".
     """
 
     if not version_payload:
@@ -404,21 +400,21 @@ async def build_report(
     """Построить ``FullReport`` для supported-пакетов через deps.dev.
 
     Использует ``cache`` для ответа batch (по конкретной версии) и для
-    GetPackage (по ключу ``(system, name, "__latest__")``). Сетевые
-    ошибки → ``DepsDevError``.
+    GetPackage (по ключу ``(system, name, "__latest__")``).
+    Сетевые ошибки превращаются в ``DepsDevError``.
     """
 
     deduped: dict[tuple[str, str, str], PackageInfo] = {}
     for p in supported:
         system = SUPPORTED_ECOSYSTEMS.get(p.ecosystem)
         if system is None:
-            # supported по контракту, так что это не должно случаться.
+            # по контракту supported не должен сюда попадать
             continue
         name = _canonical_name(p, system)
         deduped[(system, name, p.version)] = p
     unique_packages = list(deduped.values())
 
-    # что брать из кеша / по сети.
+    # что брать из кеша, а что по сети
     cached_current: dict[tuple[str, str, str], dict | None] = {}
     need_current: list[PackageInfo] = []
 
@@ -431,7 +427,7 @@ async def build_report(
         else:
             need_current.append(p)
 
-    # latest: ключ (system, name) — мы дедуплицируем сами.
+    # latest: ключ (system, name) — дедуплицируем сами
     cached_latest: dict[tuple[str, str], str | None] = {}
     need_latest_pairs: dict[tuple[str, str], None] = {}
 
@@ -454,12 +450,12 @@ async def build_report(
             if need_current:
                 fetched_current = await fetch_current_versions(session, need_current)
             if need_latest_pairs:
-                # для fetch_latest_versions достаточно списка PackageInfo
-                # с правильным ecosystem/name; для go fallback намёкa
-                # хватает уже сохранённого purl
+                # для fetch_latest_versions хватает списка PackageInfo
+                # с правильным ecosystem/name; для go-fallback хватает
+                # уже сохранённого purl.
+                # Нужен ровно один PackageInfo на пару (system, name) —
+                # берём первый матч из unique_packages
                 stubs: list[PackageInfo] = []
-                # Нам нужен ровно один PackageInfo на пару (system, name);
-                # берём первый матч из unique_packages.
                 seen: set[tuple[str, str]] = set()
                 for p in unique_packages:
                     system = SUPPORTED_ECOSYSTEMS[p.ecosystem]
@@ -469,7 +465,7 @@ async def build_report(
                         seen.add((system, name))
                 fetched_latest = await fetch_latest_versions(session, stubs)
 
-    # Сохраняем в кеш.
+    # сохраняем в кеш
     for key, payload in fetched_current.items():
         if payload is not None:
             cache.set(key[0], key[1], key[2], payload)
@@ -477,7 +473,7 @@ async def build_report(
     for (system, name), latest in fetched_latest.items():
         cache.set(system, name, _LATEST_KEY, {"latest": latest})
 
-    #  Оборачиваем в DependencyReport.
+    # оборачиваем в DependencyReport
     all_current: dict[tuple[str, str, str], dict | None] = {
         **cached_current,
         **fetched_current,
@@ -512,7 +508,7 @@ async def build_report(
 
         reports.append(
             DependencyReport(
-                name=p.name,  # отчёт показываем как было в исходных данных
+                name=p.name,  # в отчёте показываем оригинальное имя
                 ecosystem=p.ecosystem,
                 current_version=p.version,
                 latest_version=latest,
@@ -522,7 +518,7 @@ async def build_report(
             )
         )
 
-    # 6. Сводка.
+    # сводка
     outdated_count = sum(1 for r in reports if r.is_outdated)
     vulnerable_count = sum(1 for r in reports if r.advisories)
     total_packages = len(supported) + len(unsupported)

@@ -1,6 +1,6 @@
-# Вспомогательные функции, которыми пользуются другие модули.
-# Здесь живёт нормализация имён пакетов под формат deps.dev и сравнение
-# Версий (`compute_semver_diff`). Все функции — pure, без I/O.
+# вспомогательные функции для других модулей.
+# нормализация имён пакетов под формат deps.dev и сравнение версий
+# (compute_semver_diff). Все функции pure, без I/O.
 
 from __future__ import annotations
 
@@ -12,17 +12,16 @@ from packaging.version import InvalidVersion, Version
 logger = logging.getLogger(__name__)
 
 
-# --- сравнение версий ------------------------------------------------------
+# сравнение версий
 
 
 def compute_semver_diff(current: str, latest: str) -> str | None:
-    # Понимаем, насколько новая версия «крупнее» текущей: major / minor /
-    # patch. Если версии равны или одна из них не парсится — возвращаем
-    # None, и тогда вызывающий код решает сам (обычно — сравнивает
-    # строки и считает пакет устаревшим, но без понятного diff).
-    #
-    # Под капотом packaging.version.Version, у него богатая семантика
-    # (epoch, pre/post/dev), но важна только release-часть.
+    # насколько новая версия "крупнее" текущей: major / minor / patch.
+    # Если версии равны или одна не парсится — возвращаем None,
+    # и вызывающий код решает сам (обычно сравнивает строки и считает
+    # пакет устаревшим, но без понятного diff).
+    # под капотом packaging.version.Version, у него богатая семантика
+    # (epoch, pre/post/dev), но нам важна только release-часть.
 
     try:
         cur = Version(current)
@@ -33,12 +32,12 @@ def compute_semver_diff(current: str, latest: str) -> str | None:
     if cur == new:
         return None
 
-    # Берём только release-tuple (без pre/post/dev) для нас
-    # должны различаться лишь как patch, а не major.
+    # берём только release-tuple (без pre/post/dev) — для нас они
+    # должны различаться лишь как patch, а не major
     cur_rel = cur.release
     new_rel = new.release
 
-    # release может иметь произвольную длину; нормализуем до трёх компонент.
+    # release может быть произвольной длины — нормализуем до трёх компонент
     def _pad(release: tuple[int, ...]) -> tuple[int, int, int]:
         padded = list(release[:3])
         while len(padded) < 3:
@@ -55,26 +54,25 @@ def compute_semver_diff(current: str, latest: str) -> str | None:
     if new_patch != cur_patch:
         return "patch"
 
-    # Сюда попадаем, когда три числа совпали, а версии всё-таки разные:
-    # значит, отличаются только pre/post/dev/local. Считаем это patch.
+    # три числа совпали, а версии всё-таки разные — отличаются только
+    # pre/post/dev/local. Считаем это patch
     return "patch"
 
 
-# --- имена пакетов под deps.dev -------------------------------------------
+# имена пакетов под deps.dev
 
 
 def normalize_pypi_name(name: str) -> str:
-    # PEP 503: pypi не различает регистр и `-`/`_`. deps.dev живёт по
-    # тем же правилам, поэтому перед запросом причёсываем имя сами.
-    # Точки не трогаем — они валидны.
+    # PEP 503: pypi не различает регистр и `-`/`_`. deps.dev живёт
+    # по тем же правилам, поэтому причёсываем имя сами. Точки не трогаем
     return name.lower().replace("_", "-")
 
 
 def url_encode_package_name(system: str, name: str) -> str:
-    # Имена пакетов содержат всё что угодно: двоеточия (maven),
-    # слэши (go-модули), скобки в названиях scope (@scope/pkg).
-    # В URL deps.dev их положено кодировать полностью, без safe-символов.
-    # quote(safe="") как раз это и делает.
+    # имена пакетов содержат всё что угодно: двоеточия (maven),
+    # слэши (go-модули), скобки в scope (@scope/pkg). В URL deps.dev
+    # их положено кодировать полностью, без safe-символов. quote(safe="")
+    # как раз это и делает
     if system == "PYPI":
         name = normalize_pypi_name(name)
     return quote(name, safe="")

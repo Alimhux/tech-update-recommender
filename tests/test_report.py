@@ -15,9 +15,7 @@ from tech_update_recommender.models import (
 )
 from tech_update_recommender.report import LLM_DISCLAIMER_TEMPLATE, render_report
 
-# ---------------------------------------------------------------------------
-# Фикстуры
-# ---------------------------------------------------------------------------
+# фикстуры
 
 
 @pytest.fixture
@@ -106,9 +104,7 @@ def empty_full_report() -> FullReport:
     )
 
 
-# ---------------------------------------------------------------------------
 # JSON
-# ---------------------------------------------------------------------------
 
 
 def test_json_format_valid(rich_full_report: FullReport) -> None:
@@ -163,7 +159,7 @@ def test_only_outdated_filter(rich_full_report: FullReport) -> None:
 def test_only_outdated_does_not_mutate_report(
     rich_full_report: FullReport,
 ) -> None:
-    """Фильтр не должен изменять переданный FullReport."""
+    """Фильтр не должен менять переданный FullReport."""
 
     before = len(rich_full_report.supported)
     render_report(rich_full_report, fmt="json", only_outdated=True)
@@ -175,25 +171,23 @@ def test_summary_counts(rich_full_report: FullReport) -> None:
 
     out = render_report(rich_full_report, fmt="json", only_outdated=True)
     parsed = json.loads(out)
-    # Несмотря на фильтр (1 пакет был отброшен), агрегаты сохраняются.
+    # несмотря на фильтр (один пакет отброшен), агрегаты сохраняются
     assert parsed["total_packages"] == 4
     assert parsed["outdated_count"] == 2
     assert parsed["vulnerable_count"] == 1
 
-    # Та же проверка для table-формата.
+    # то же самое для table-формата
     out_table = render_report(rich_full_report, fmt="table", only_outdated=True)
     assert "Total: 4, outdated: 2, with CVE: 1" in out_table
 
-    # И для markdown.
+    # и для markdown
     out_md = render_report(rich_full_report, fmt="markdown", only_outdated=True)
     assert "**Total:** 4" in out_md
     assert "**outdated:** 2" in out_md
     assert "**with CVE:** 1" in out_md
 
 
-# ---------------------------------------------------------------------------
-# Markdown
-# ---------------------------------------------------------------------------
+# markdown
 
 
 def test_markdown_has_disclaimer(rich_full_report: FullReport) -> None:
@@ -209,9 +203,9 @@ def test_markdown_has_disclaimer(rich_full_report: FullReport) -> None:
     )
     expected = LLM_DISCLAIMER_TEMPLATE.format(model_name=model_name)
     assert expected in out
-    # Проверяем, что само имя модели прокинулось.
+    # имя модели должно прокинуться
     assert model_name in out
-    # Заголовок секции и содержимое тоже на месте.
+    # заголовок секции и содержимое тоже на месте
     assert "## AI-рекомендации" in out
     assert advice in out
 
@@ -232,11 +226,11 @@ def test_markdown_table_pipe_format(rich_full_report: FullReport) -> None:
     out = render_report(rich_full_report, fmt="markdown")
     header = "| Name | Ecosystem | Current | Latest | Diff | Advisories |"
     assert header in out
-    # Сепаратор содержит правильное число колонок.
+    # сепаратор с правильным числом колонок
     assert "|------|------|------|------|------|------|" in out
-    # Хотя бы одна строка пакета.
+    # хотя бы одна строка пакета
     assert "| lodash | npm |" in out
-    # CVE-id виден в колонке Advisories.
+    # CVE-id виден в колонке Advisories
     assert "GHSA-35jh-r3h4-6jhm" in out
 
 
@@ -250,9 +244,7 @@ def test_markdown_metadata_block(rich_full_report: FullReport) -> None:
     assert "2026-05-07" in out
 
 
-# ---------------------------------------------------------------------------
-# Unsupported
-# ---------------------------------------------------------------------------
+# unsupported
 
 
 def test_unsupported_section_present(rich_full_report: FullReport) -> None:
@@ -270,7 +262,7 @@ def test_unsupported_section_present(rich_full_report: FullReport) -> None:
 def test_unsupported_section_absent_when_empty(
     sample_full_report: FullReport,
 ) -> None:
-    """Без unsupported соответствующие секции не появляются."""
+    """Без unsupported соответствующих секций нет."""
 
     out_md = render_report(sample_full_report, fmt="markdown")
     assert "## Unsupported packages" not in out_md
@@ -279,13 +271,11 @@ def test_unsupported_section_absent_when_empty(
     assert "Не проверено через deps.dev" not in out_table
 
 
-# ---------------------------------------------------------------------------
-# Table
-# ---------------------------------------------------------------------------
+# table
 
 
 def test_table_format_contains_columns(rich_full_report: FullReport) -> None:
-    """Заголовки колонок присутствуют в выводе."""
+    """Заголовки колонок есть в выводе."""
 
     out = render_report(rich_full_report, fmt="table")
     for col in ("Name", "Ecosystem", "Current", "Latest", "Diff", "Advisories"):
@@ -304,7 +294,7 @@ def test_table_no_crash_empty(empty_full_report: FullReport) -> None:
 
     out = render_report(empty_full_report, fmt="table")
     assert "Total: 0, outdated: 0, with CVE: 0" in out
-    # Заголовки таблицы тоже присутствуют (пустая таблица — норма).
+    # заголовки таблицы тоже на месте (пустая таблица — норма)
     assert "Name" in out
 
 
@@ -327,15 +317,13 @@ def test_table_only_outdated_drops_rows(rich_full_report: FullReport) -> None:
     """only_outdated скрывает актуальный пакет в table-выводе."""
 
     out = render_report(rich_full_report, fmt="table", only_outdated=True)
-    # Актуальный пакет (requests) не должен попасть в строки таблицы.
+    # актуальный пакет (requests) не должен попасть в строки таблицы
     assert "requests" not in out
     assert "lodash" in out
     assert "express" in out
 
 
-# ---------------------------------------------------------------------------
-# Прочее
-# ---------------------------------------------------------------------------
+# прочее
 
 
 def test_unknown_format_raises(rich_full_report: FullReport) -> None:
@@ -346,7 +334,7 @@ def test_unknown_format_raises(rich_full_report: FullReport) -> None:
 
 
 def test_invalid_version_marker(empty_full_report: FullReport) -> None:
-    """is_outdated=True && semver_diff=None → diff помечен как '?'."""
+    """is_outdated=True и semver_diff=None: diff помечается как '?'."""
 
     weird = DependencyReport(
         name="weird-pkg",
