@@ -1,17 +1,16 @@
-"""LLMModule — генерация AI-рекомендаций по обновлению зависимостей.
+"""Модуль, который ходит в LLM за советами по обновлению зависимостей.
 
-Модуль строит ``LLMInput`` (отчёт + структура проекта + файлы зависимостей),
-формирует промпт и вызывает ``litellm.completion`` для получения markdown
-с рекомендациями.
+Что тут происходит, если коротко:
+  1. собираем LLMInput — это отчёт + дерево проекта + файлы зависимостей,
+  2. лепим из этого промпт,
+  3. зовём litellm.completion, получаем markdown с рекомендациями.
 
-Контракт см. в ``docs/blocks/05-llm-module.md`` и в PLAN.md, секция «LLMModule».
+Подробный контракт лежит в ``docs/blocks/05-llm-module.md`` и в PLAN.md.
 
-Замечания по безопасности:
-
-* API-ключи никогда не логируются. Строки ``api_key`` не передаются в логгер
-  ни прямо, ни в составе сообщений.
-* Реальных сетевых вызовов нет — только через ``litellm``; в тестах функцию
-  ``litellm.completion`` мокают.
+Пара важных моментов про безопасность:
+  - API-ключ нигде не логируется — ни в чистом виде, ни внутри текста.
+  - В сеть мы ходим только через litellm. В тестах его мокают, реальных
+    запросов нет.
 """
 
 from __future__ import annotations
@@ -28,12 +27,10 @@ from tech_update_recommender.models import DependencyReport, FullReport, LLMInpu
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Константы
-# ---------------------------------------------------------------------------
+# --- константы (держу их кучкой, чтобы потом не бегать по файлу)
 
-#: Каталоги, которые исключаются и в дереве проекта, и при поиске
-#: dependency-файлов. Сегмент пути совпадает по точному имени.
+# папки, которые мы никогда не показываем LLM: и в дереве проекта,
+# и при поиске файлов зависимостей. Сравниваем по точному имени сегмента
 EXCLUDED_DIRS: frozenset[str] = frozenset(
     {
         "node_modules",
@@ -46,17 +43,18 @@ EXCLUDED_DIRS: frozenset[str] = frozenset(
     }
 )
 
-#: Глубина обхода дерева проекта (включительно).
+# как глубоко лезем по проекту, когда строим дерево
 _TREE_MAX_DEPTH: int = 4
 
-#: Глубина поиска dependency-файлов.
+# а это глубина для поиска файлов вроде requirements.txt
 _DEPS_MAX_DEPTH: int = 3
 
-#: Максимальный размер dependency-файла, который читается в LLM-контекст.
-#: Lock-файлы npm/yarn могут быть в десятки мегабайт — туда не хочется.
+# не читаем файлы тяжелее этого порога. Lock-файлы npm бывают по 10+ MB —
+# если их пихнуть в промпт, контекст просто взорвётся
 _MAX_DEPENDENCY_FILE_BYTES: int = 200 * 1024  # 200 KB
 
-#: Точные имена файлов, которые мы считаем дескрипторами зависимостей.
+# список стандартных файлов зависимостей по точному имени.
+# тут разные экосистемы: python, node, rust, go, java, ruby, .net
 _DEP_FILE_EXACT: frozenset[str] = frozenset(
     {
         "requirements.txt",
@@ -80,19 +78,21 @@ _DEP_FILE_EXACT: frozenset[str] = frozenset(
     }
 )
 
-#: Glob-паттерны для имён файлов (применяются к ``Path.name``).
+# а это всякие "не совсем точные" имена — типа requirements-dev.txt
+# или *.csproj. Сюда не лезет точное сравнение, поэтому используем glob
 _DEP_FILE_GLOBS: tuple[str, ...] = (
     "requirements-*.txt",
     "*.csproj",
 )
 
-#: Топ-N пакетов в полной версии LLMInput.
+# сколько пакетов максимум кладём в LLMInput в обычном режиме
 _TOP_N_FULL: int = 50
 
-#: Топ-N пакетов после агрессивного усечения.
+# а сколько оставляем, если совсем не лезет в контекст
 _TOP_N_TRUNCATED: int = 20
 
-#: Порядок приоритета semver_diff (большее число = выше приоритет).
+# приоритеты по типу обновления: major важнее всех, потом minor, потом patch.
+# числа большие = выше приоритет
 _SEMVER_PRIORITY: dict[str | None, int] = {
     "major": 3,
     "minor": 2,
@@ -100,7 +100,8 @@ _SEMVER_PRIORITY: dict[str | None, int] = {
     None: 0,
 }
 
-#: Точный текст system prompt — не редактируем без обновления PLAN.md.
+# системный промпт. Текст фиксированный — если будете править,
+# не забудьте обновить и PLAN.md, иначе разъедется
 SYSTEM_PROMPT: str = (
     "Ты — эксперт по управлению зависимостями в software-проектах.\n"
     "Тебе предоставлен отчёт об устаревших зависимостях проекта,\n"
@@ -122,96 +123,97 @@ SYSTEM_PROMPT: str = (
 )
 
 
-# ---------------------------------------------------------------------------
-# Иерархия исключений
-# ---------------------------------------------------------------------------
+# свои исключения, чтобы наверху можно было нормально ловить
+# и показывать юзеру понятное сообщение
 
 
 class LLMError(Exception):
-    """Базовое исключение модуля LLM."""
+    """Базовый класс — от него всё остальное наследуется."""
 
 
 class LLMNotAvailableError(LLMError):
-    """``litellm`` не установлен или недоступен."""
+    """litellm не установлен. Скажем юзеру, как его поставить."""
 
 
 class LLMAuthError(LLMError):
-    """Невалидный API-ключ или отсутствует доступ к модели."""
+    """Кривой API-ключ или нет доступа к модели."""
 
 
 class LLMRateLimitError(LLMError):
-    """Провайдер вернул rate-limit и retry не помог."""
+    """Провайдер ругается на частоту запросов, и retry не помог."""
 
 
 class LLMNetworkError(LLMError):
-    """Сетевая ошибка / таймаут при общении с провайдером."""
+    """Сеть отвалилась или таймаут."""
 
 
 class LLMContextOverflowError(LLMError):
-    """Промпт не помещается в ``max_context_tokens`` даже после усечения."""
+    """Промпт не лезет в лимит токенов даже после агрессивного усечения."""
 
 
-# ---------------------------------------------------------------------------
-# 1. Сбор контекста — дерево проекта
-# ---------------------------------------------------------------------------
+# --- 1) дерево проекта. По сути свой маленький find на питоне
 
 
 def _is_excluded(rel_parts: tuple[str, ...]) -> bool:
-    """Проверить, попадает ли любой сегмент относительного пути в EXCLUDED_DIRS."""
-
+    # ищем хоть один сегмент пути из EXCLUDED_DIRS
+    # т.е. и "node_modules/...", и "src/node_modules/..." — оба мимо
     return any(part in EXCLUDED_DIRS for part in rel_parts)
 
 
 def collect_project_tree(path: str, max_lines: int = 200) -> str:
-    """Собрать дерево файлов проекта в виде строки.
+    """Сделать дерево файлов проекта в виде одной большой строки.
 
-    Эквивалент ``find <path> -type f`` с отбрасыванием служебных каталогов
-    (``node_modules``, ``.git``, ``venv``, ``.venv``, ``__pycache__``,
-    ``dist``, ``build``). Реализовано через ``pathlib`` без сторонних утилит.
+    По сути это такой ``find <path> -type f``, только написанный руками
+    через pathlib и с выкидыванием всякой служебки (node_modules, .git и
+    т.п.).
 
     Параметры:
-        path: путь к корню проекта.
-        max_lines: верхняя граница строк в выводе. При превышении к строке
-            добавляется метка ``... (truncated, N more files)`` (где ``N`` —
-            сколько ещё файлов было не показано).
+        path: где искать (корень проекта).
+        max_lines: больше этого числа строк не отдаём. Если переполнили —
+            в конец добавляем строчку "... (truncated, N more files)",
+            чтобы LLM понимал, что показали не всё.
 
     Возвращает:
-        Многострочную строку с относительными путями, по одному на строку.
-        Если корня не существует — пустая строка.
+        Строку, в которой каждый файл на отдельной строке.
+        Если папки вообще нет — просто пустая строка (без ошибок).
     """
 
     base = Path(path)
+    # если папки нет / это не папка — возвращаем пустую строку, не падаем
     if not base.exists() or not base.is_dir():
         return ""
 
     collected: list[str] = []
-    truncated_extra = 0
+    truncated_extra = 0  # сколько файлов не показали (для пометки в конце)
 
-    # rglob("*") даёт все файлы и каталоги. Мы фильтруем по is_file() и
-    # по сегментам пути (чтобы исключить вложенные node_modules/.git).
+    # rglob("*") идёт рекурсивно по всему. Дальше фильтруем сами:
+    # только файлы и без EXCLUDED_DIRS на любом уровне пути
     for p in base.rglob("*"):
         try:
             rel = p.relative_to(base)
         except ValueError:
+            # такого по идее не бывает, но мало ли — пропустим
             continue
         rel_parts = rel.parts
         if not rel_parts:
             continue
-        # Глубина = количество сегментов в относительном пути.
+        # глубина = сколько сегментов в относительном пути
         if len(rel_parts) > _TREE_MAX_DEPTH:
             continue
-        # Проверяем все сегменты пути целиком (включая родительские dirs).
+        # вырезаем всё, что лежит в node_modules / .git / venv / ...
         if _is_excluded(rel_parts):
             continue
+        # папки нам в дереве не нужны, только файлы
         if not p.is_file():
             continue
 
         if len(collected) < max_lines:
             collected.append(str(rel))
         else:
+            # лимит уже выбрали — считаем сколько ещё было
             truncated_extra += 1
 
-    # Стабильная сортировка — для воспроизводимости тестов.
+    # сортируем — иначе порядок зависит от ОС и тесты будут флакать
     collected.sort()
 
     if truncated_extra > 0:
@@ -220,14 +222,11 @@ def collect_project_tree(path: str, max_lines: int = 200) -> str:
     return "\n".join(collected)
 
 
-# ---------------------------------------------------------------------------
-# 2. Сбор контекста — файлы зависимостей
-# ---------------------------------------------------------------------------
+# 2) файлы зависимостей — requirements.txt, package.json и прочая братия
 
 
 def _matches_dep_file(name: str) -> bool:
-    """Истина, если имя файла относится к стандартным dependency-файлам."""
-
+    # сначала смотрим точное совпадение (быстрее), потом glob
     if name in _DEP_FILE_EXACT:
         return True
     for glob in _DEP_FILE_GLOBS:
@@ -237,22 +236,22 @@ def _matches_dep_file(name: str) -> bool:
 
 
 def collect_dependency_files(path: str) -> dict[str, str]:
-    """Найти и прочитать стандартные файлы зависимостей в проекте.
+    """Найти и прочитать манифесты зависимостей.
 
-    Поиск ведётся в корне и до 3 уровней вложенности. Каталоги из
-    ``EXCLUDED_DIRS`` пропускаются (включая вложенные).
-    Файлы тяжелее ``_MAX_DEPENDENCY_FILE_BYTES`` (200 KB) пропускаются —
-    обычно это огромные lock-файлы, которые забьют контекст.
+    Ищем в корне и максимум на 3 уровня вглубь. Папки из EXCLUDED_DIRS
+    пропускаем (вместе с тем, что в них лежит). Слишком жирные файлы
+    (>200 KB) тоже пропускаем — обычно это lock-файлы, и они LLM не нужны.
 
     Параметры:
-        path: путь к корню проекта.
+        path: путь к проекту.
 
     Возвращает:
-        ``{relative_path: content}``. Содержимое читается в UTF-8 с
-        ``errors="replace"`` — чтобы не падать на бинарных вкраплениях.
+        Словарь вида ``{относительный_путь: содержимое}``. Читаем как UTF-8,
+        ошибки заменяем — чтобы не падать на бинарных вставках.
     """
 
     base = Path(path)
+    # нет папки — пустой словарь, без эксепшенов
     if not base.exists() or not base.is_dir():
         return {}
 
@@ -266,21 +265,25 @@ def collect_dependency_files(path: str) -> dict[str, str]:
         rel_parts = rel.parts
         if not rel_parts:
             continue
+        # ограничиваем глубину — лезть в чужие монорепы по 10 уровней не надо
         if len(rel_parts) > _DEPS_MAX_DEPTH:
             continue
         if _is_excluded(rel_parts):
             continue
         if not p.is_file():
             continue
+        # если имя файла не похоже на манифест — пропускаем
         if not _matches_dep_file(p.name):
             continue
 
+        # узнаём размер; если stat упал (битый симлинк?) — едем дальше
         try:
             size = p.stat().st_size
         except OSError as err:
             logger.debug("cannot stat %s: %s", rel, err)
             continue
         if size > _MAX_DEPENDENCY_FILE_BYTES:
+            # слишком большой файл — лочим, но пишем в дебаг чтобы было видно почему
             logger.debug(
                 "skip large file %s (%d bytes > %d)",
                 rel,
@@ -289,6 +292,7 @@ def collect_dependency_files(path: str) -> dict[str, str]:
             )
             continue
 
+        # читаем как текст; если файл вдруг не открылся — лог и идём дальше
         try:
             content = p.read_text(encoding="utf-8", errors="replace")
         except OSError as err:
@@ -299,24 +303,19 @@ def collect_dependency_files(path: str) -> dict[str, str]:
     return result
 
 
-# ---------------------------------------------------------------------------
-# 3. Сборка LLMInput
-# ---------------------------------------------------------------------------
+# 3) сборка LLMInput — фильтруем, расставляем приоритеты, режем до top-N
 
 
 def _is_relevant(dep: DependencyReport) -> bool:
-    """Релевантны для LLM пакеты, которые устарели или имеют CVE."""
-
+    # для LLM интересны только устаревшие или дырявые пакеты.
+    # свежие и без CVE — в промпт не пихаем, чтобы не тратить токены
     return dep.is_outdated or len(dep.advisories) > 0
 
 
 def _priority_key(dep: DependencyReport) -> tuple[int, int]:
-    """Ключ сортировки: больше advisories и крупнее semver_diff — выше.
-
-    Возвращаем кортеж отрицательных значений, чтобы обычный
-    ``sorted(... )`` без ``reverse`` давал нужный порядок.
-    """
-
+    # делаем ключ сортировки: сначала те, у кого больше CVE, потом major-обновления.
+    # хитрость: возвращаем отрицательные значения, чтобы можно было
+    # просто sorted() без reverse=True — получится по убыванию приоритета
     return (
         -len(dep.advisories),
         -_SEMVER_PRIORITY.get(dep.semver_diff, 0),
@@ -324,19 +323,18 @@ def _priority_key(dep: DependencyReport) -> tuple[int, int]:
 
 
 def _select_top_n(deps: list[DependencyReport], top_n: int) -> list[DependencyReport]:
-    """Отфильтровать релевантные и взять top-N по приоритету."""
-
+    # отфильтровали → отсортировали → взяли первые top_n
     relevant = [d for d in deps if _is_relevant(d)]
     relevant.sort(key=_priority_key)
     return relevant[:top_n]
 
 
 def _build_partial_report(report: FullReport, top_n: int) -> FullReport:
-    """Создать копию ``FullReport`` с урезанным ``supported`` и пустым ``unsupported``.
+    """Сделать "обрезанную" копию FullReport для LLM.
 
-    Счётчики (``total_packages``, ``outdated_count``, ``vulnerable_count``)
-    сохраняются от оригинала — они полезны LLM как общий контекст ("в проекте
-    300 пакетов, я показал тебе только top-50").
+    Оставляем только топ-N пакетов в supported, unsupported делаем пустым.
+    А вот счётчики (total_packages и т.д.) берём из оригинала — пусть LLM
+    видит реальные числа ("в проекте 300 зависимостей, тебе показали 50").
     """
 
     top = _select_top_n(report.supported, top_n)
@@ -352,12 +350,13 @@ def _build_partial_report(report: FullReport, top_n: int) -> FullReport:
 
 
 def build_llm_input(report: FullReport, project_path: str) -> LLMInput:
-    """Собрать ``LLMInput`` из отчёта и контекста проекта.
+    """Собираем всё, что пойдёт в LLM, в один LLMInput.
 
-    * В ``report.supported`` остаются только outdated/vulnerable пакеты.
-    * При >200 таких пакетов сортируем по числу advisories и приоритету
-      semver_diff (major > minor > patch > None) и берём top-50.
-    * ``project_tree`` и ``dependency_files`` собираются с диска.
+    Что делает:
+      - выкидывает из отчёта пакеты, которые свежие и без CVE,
+      - если осталось дофига — берёт top-50 по приоритету
+        (сначала CVE, потом major > minor > patch),
+      - подтягивает дерево проекта и файлы зависимостей с диска.
     """
 
     partial_report = _build_partial_report(report, _TOP_N_FULL)
@@ -370,91 +369,96 @@ def build_llm_input(report: FullReport, project_path: str) -> LLMInput:
     )
 
 
-# ---------------------------------------------------------------------------
-# 4. Промпт
-# ---------------------------------------------------------------------------
+# --- 4) сам промпт. Это то, что в итоге уходит в LLM как user message
 
 
 def _report_for_prompt(report: FullReport) -> str:
-    """Сериализовать частичный отчёт в JSON для user prompt'а.
-
-    Используется ``model_dump(mode="json")``, чтобы datetime ушёл в ISO 8601.
-    """
-
+    # сериализуем отчёт в JSON. mode="json" нужен чтобы datetime
+    # автоматически превратился в ISO-строку, иначе json.dumps упадёт
     data = report.model_dump(mode="json")
     return json.dumps(data, indent=2, ensure_ascii=False)
 
 
 def build_user_prompt(llm_input: LLMInput) -> str:
-    """Построить user prompt по контракту из ``05-llm-module.md``."""
+    """Собираем user-сообщение по кусочкам.
+
+    Структура: отчёт → дерево проекта → файлы зависимостей → инструкция.
+    Формат фиксированный, описан в ``05-llm-module.md``.
+    """
 
     parts: list[str] = []
+    # секция 1: сам отчёт по зависимостям (как JSON, чтобы было однозначно)
     parts.append("Отчёт об устаревших и уязвимых зависимостях:")
     parts.append(_report_for_prompt(llm_input.report))
     parts.append("")
+    # секция 2: дерево проекта, чтобы LLM понимала структуру
     parts.append("Структура проекта:")
     parts.append(llm_input.project_tree or "(пусто)")
     parts.append("")
+    # секция 3: содержимое манифестов
     parts.append("Файлы зависимостей:")
     if llm_input.dependency_files:
         for rel_path, content in llm_input.dependency_files.items():
+            # === имя файла === — это разделитель, по нему LLM ориентируется
             parts.append(f"=== {rel_path} ===")
             parts.append(content)
             parts.append("")
     else:
         parts.append("(не найдено)")
         parts.append("")
+    # финальная команда — чтобы модель выдала ответ ровно в нужном формате
     parts.append("Сформируй рекомендации в указанном формате.")
     return "\n".join(parts)
 
 
-# ---------------------------------------------------------------------------
-# 5. Лимит контекста
-# ---------------------------------------------------------------------------
+# 5) считаем токены и режем контекст если он не влазит
 
 
 def _import_litellm() -> Any | None:
-    """Ленивый импорт ``litellm``. Возвращает модуль или ``None``.
+    """Лениво подгружаем litellm. Если его нет — возвращаем None.
 
-    Поддерживает тестовый патч ``sys.modules["litellm"] = None``,
-    при котором ``import litellm`` отдаст None, и мы должны это
-    интерпретировать как "не установлен".
+    Отдельно ловим случай ``sys.modules["litellm"] = None`` — так
+    делают тесты, чтобы изобразить "не установлен". Без этой проверки
+    Python вернул бы кэшированный None и всё бы запуталось.
     """
 
+    # тестовый патч: модуль уже подменили на None
     if "litellm" in sys.modules and sys.modules["litellm"] is None:
         return None
     try:
         import litellm  # type: ignore[import-not-found]
     except ImportError:
+        # его не поставили — это ок, просто скажем "недоступен"
         return None
     return litellm
 
 
 def count_tokens(model: str, text: str) -> int:
-    """Оценить число токенов в ``text`` для ``model``.
+    """Прикидываем сколько токенов займёт текст.
 
-    Использует ``litellm.token_counter`` если ``litellm`` установлен и
-    модель ему знакома. Иначе (или при любой ошибке внутри) возвращает
-    грубую оценку ``len(text) // 4`` — этого достаточно для решения
-    "усекать или нет".
+    Если litellm есть и знает модель — спросим у него (он точнее).
+    Если нет — берём грубую формулу ``len // 4``. Для решения
+    "влезет / не влезет" этого хватает с головой.
     """
 
     litellm = _import_litellm()
     if litellm is not None:
         try:
             return int(litellm.token_counter(model=model, text=text))
-        except Exception as err:  # noqa: BLE001 — token_counter может бросать что угодно
+        except Exception as err:  # noqa: BLE001 — token_counter любит ругаться по-разному
+            # модель неизвестна / упало по своим причинам — просто идём в fallback
             logger.debug("token_counter fallback for %s: %s", model, err)
+    # запасной вариант: ~4 символа ≈ 1 токен (грубо, но работает)
     return max(1, len(text) // 4)
 
 
 def _truncate_dep_files(
     files: dict[str, str], max_bytes: int = 10 * 1024, max_lines: int = 200
 ) -> dict[str, str]:
-    """Усечь большие dependency-файлы.
+    """Урезаем файлы зависимостей, если они слишком жирные.
 
-    Файлы > 10 KB обрезаются до первых ``max_lines`` строк с маркером.
-    Маленькие файлы остаются как есть.
+    Маленькие файлы не трогаем. Большие (>10 KB) обрезаем до первых
+    ``max_lines`` строк и в конец дописываем пометку.
     """
 
     out: dict[str, str] = {}
@@ -462,10 +466,12 @@ def _truncate_dep_files(
         if len(content) > max_bytes:
             lines = content.splitlines()
             if len(lines) > max_lines:
+                # берём начало + маркер "обрезано столько-то"
                 head = lines[:max_lines]
                 head.append(f"... (truncated, {len(lines) - max_lines} more lines)")
                 out[name] = "\n".join(head)
             else:
+                # размер большой, но строк мало (одна длинная строка?) — пусть будет как есть
                 out[name] = content
         else:
             out[name] = content
@@ -473,13 +479,12 @@ def _truncate_dep_files(
 
 
 def _truncate_tree(tree: str, max_lines: int) -> str:
-    """Урезать готовое представление дерева до ``max_lines`` строк."""
-
+    # обрезаем дерево по строкам. Если оно и так короткое — ничего не делаем
     if not tree:
         return tree
     lines = tree.splitlines()
-    # Если уже стоит маркер truncated — учитываем его как одну строку,
-    # пересчитываем "сколько ещё".
+    # тут уже могла быть пометка про truncated с прошлого раза —
+    # она просто будет считаться обычной строкой, и это ок
     if len(lines) <= max_lines:
         return tree
     head = lines[:max_lines]
@@ -488,8 +493,7 @@ def _truncate_tree(tree: str, max_lines: int) -> str:
 
 
 def _fits(model: str, system_prompt: str, user_prompt: str, limit: int) -> bool:
-    """Промпт укладывается в ``limit`` токенов?"""
-
+    # быстрая проверка: укладываемся в бюджет токенов или нет?
     total = count_tokens(model, system_prompt) + count_tokens(model, user_prompt)
     return total <= limit
 
@@ -500,22 +504,24 @@ def truncate_input(
     max_context_tokens: int = 8000,
     system_prompt: str = SYSTEM_PROMPT,
 ) -> LLMInput:
-    """Постепенно усекать ``LLMInput`` пока промпт не уложится в лимит.
+    """Постепенно ужимаем LLMInput, пока он не влезет в лимит.
 
-    Шаги:
-        1. Если уже укладывается — вернуть как есть.
-        2. Урезать дерево до 100 строк.
-        3. Урезать большие dependency-файлы (>10 KB) до 200 строк.
-        4. Уменьшить top-N пакетов с 50 до 20.
+    Идея — резать поэтапно, чтобы по возможности оставить как можно
+    больше контекста. Шаги от лёгкого к жёсткому:
+      1. Уже влезает? — отдаём как есть.
+      2. Режем дерево проекта до 100 строк.
+      3. Режем большие манифесты до 200 строк.
+      4. Уменьшаем top-N пакетов с 50 до 20.
 
-    Если ничего не помогло — ``LLMContextOverflowError``.
+    Если и после всего этого не вошло — кидаем LLMContextOverflowError.
     """
 
     user_prompt = build_user_prompt(llm_input)
+    # шаг 1: проверка "а может уже влезает?"
     if _fits(model, system_prompt, user_prompt, max_context_tokens):
         return llm_input
 
-    # Шаг 2: дерево → 100 строк.
+    # шаг 2: подрезаем дерево
     new_tree = _truncate_tree(llm_input.project_tree, max_lines=100)
     candidate = LLMInput(
         report=llm_input.report,
@@ -526,7 +532,7 @@ def truncate_input(
     if _fits(model, system_prompt, user_prompt, max_context_tokens):
         return candidate
 
-    # Шаг 3: большие dependency-файлы → 200 строк.
+    # шаг 3: подрезаем толстые dep-файлы (обычно package-lock.json виноват)
     new_files = _truncate_dep_files(candidate.dependency_files)
     candidate = LLMInput(
         report=candidate.report,
@@ -537,7 +543,7 @@ def truncate_input(
     if _fits(model, system_prompt, user_prompt, max_context_tokens):
         return candidate
 
-    # Шаг 4: top-N → 20.
+    # шаг 4: жертвуем количеством пакетов — оставляем 20 самых важных
     smaller_report = _build_partial_report(candidate.report, _TOP_N_TRUNCATED)
     candidate = LLMInput(
         report=smaller_report,
@@ -548,35 +554,41 @@ def truncate_input(
     if _fits(model, system_prompt, user_prompt, max_context_tokens):
         return candidate
 
+    # всё, что могли — порезали, а оно всё равно не лезет. Сдаёмся
     raise LLMContextOverflowError(
         f"Промпт не уложился в {max_context_tokens} токенов даже после усечения."
     )
 
 
-# ---------------------------------------------------------------------------
-# 6. Вызов LiteLLM
-# ---------------------------------------------------------------------------
+# --- 6) сам вызов LiteLLM + перевод его ошибок в наши
 
 
 def _is_local_model(model: str) -> bool:
-    """Локальные модели (Ollama и т.п.) не требуют API-ключа."""
-
+    # для локальных моделей (ollama) ключ не нужен
     if not model:
         return False
     return model.startswith("ollama/") or "ollama" in model.lower()
 
 
 def _map_litellm_error(litellm: Any, err: Exception) -> LLMError:
-    """Перевод специфичных litellm-ошибок в наш домен."""
+    """Превращаем ошибки litellm в наши, чтобы CLI знал что показывать.
 
+    Логика: смотрим, какого типа исключение прилетело, и подбираем
+    подходящий класс из нашей иерархии.
+    """
+
+    # 1. кривой API-ключ
     auth_cls = getattr(litellm, "AuthenticationError", None)
     if auth_cls is not None and isinstance(err, auth_cls):
         return LLMAuthError("Невалидный API-ключ. Проверьте --llm-api-key или env vars.")
 
+    # 2. слишком частые запросы
     rate_cls = getattr(litellm, "RateLimitError", None)
     if rate_cls is not None and isinstance(err, rate_cls):
         return LLMRateLimitError("Превышен rate limit провайдера LLM.")
 
+    # 3. сеть/таймаут — собираем оба класса вместе, потому что для юзера
+    # это одно и то же ("LLM не отвечает")
     network_classes: list[type] = []
     for name in ("APIConnectionError", "Timeout"):
         cls = getattr(litellm, name, None)
@@ -585,14 +597,17 @@ def _map_litellm_error(litellm: Any, err: Exception) -> LLMError:
     if network_classes and isinstance(err, tuple(network_classes)):
         return LLMNetworkError(f"Сетевая ошибка при вызове LLM: {err}")
 
+    # 4. отдельно ловим переполнение окна модели
     bad_req_cls = getattr(litellm, "BadRequestError", None)
     ctx_cls = getattr(litellm, "ContextWindowExceededError", None)
     if ctx_cls is not None and isinstance(err, ctx_cls):
         return LLMContextOverflowError("Контекст превышает лимит модели даже после усечения.")
     if bad_req_cls is not None and isinstance(err, bad_req_cls):
-        # Часто BadRequestError — это переполнение контекста на стороне модели.
+        # обычно сюда падают плохие параметры запроса или тот же overflow,
+        # просто без отдельного класса. Не угадаем точнее — отдаём базовое
         return LLMError(f"Невалидный запрос к LLM: {err}")
 
+    # всё остальное (неизвестная нам ошибка от провайдера) — общая LLMError
     return LLMError(f"Ошибка LiteLLM: {err}")
 
 
@@ -604,36 +619,43 @@ def generate_advice(
     temperature: float = 0.3,
     max_context_tokens: int = 8000,
 ) -> str:
-    """Сгенерировать markdown-рекомендации по обновлению зависимостей.
+    """Главная функция модуля — спросить LLM и вернуть markdown-ответ.
 
     Параметры:
-        llm_input: вход модуля (отчёт + контекст проекта).
-        model: имя модели в формате LiteLLM (``"gemini/gemini-2.0-flash"``,
-            ``"claude-sonnet-4-20250514"``, ``"ollama/llama3"``…).
-        api_key: API-ключ. Для локальных моделей (``ollama/...``) не нужен.
-        max_tokens: верхний предел токенов в ответе.
-        temperature: температура сэмплинга (0–1).
-        max_context_tokens: бюджет токенов на промпт; при превышении
-            ``llm_input`` усекается через :func:`truncate_input`.
+        llm_input: то, что отдадим модели (отчёт + контекст проекта).
+        model: имя модели в формате litellm — например,
+            ``"gemini/gemini-2.0-flash"``, ``"claude-sonnet-4-20250514"``,
+            ``"ollama/llama3"`` и т.п.
+        api_key: ключ от провайдера. Для ollama (локально) можно None.
+        max_tokens: сколько максимум токенов разрешаем модели в ответе.
+        temperature: насколько "креативно" модель отвечает (0..1).
+            По умолчанию 0.3 — хотим почти детерминированный совет.
+        max_context_tokens: бюджет на сам промпт. Если не влезаем —
+            автоматом ужимаемся через truncate_input.
 
     Возвращает:
-        Markdown-строку из ``response.choices[0].message.content``.
+        Текст ответа модели (markdown).
 
     Бросает:
-        :class:`LLMNotAvailableError` — если ``litellm`` не установлен.
-        :class:`LLMAuthError` / :class:`LLMRateLimitError` /
-        :class:`LLMNetworkError` / :class:`LLMContextOverflowError` —
-        в соответствующих кейсах. ``LLMError`` для всех прочих ошибок
-        провайдера.
+        LLMNotAvailableError — если litellm не поставили.
+        LLMAuthError / LLMRateLimitError / LLMNetworkError /
+        LLMContextOverflowError — по типу проблемы.
+        LLMError — на всё остальное.
     """
 
     litellm = _import_litellm()
     if litellm is None:
+<<<<<<< HEAD:tech_update_recommender/llm_module.py
         raise LLMNotAvailableError(
             "litellm не установлен. Установите: pip install tech-upd-recommender"
         )
+=======
+        # litellm не установлен — даём юзеру понятную команду
+        raise LLMNotAvailableError("litellm не установлен. Установите: pip install depscope[llm]")
+>>>>>>> 2c8531a (llm module comments changed):depscope/llm_module.py
 
-    # Усекаем под бюджет контекста (может бросить LLMContextOverflowError).
+    # сначала ужимаем вход под бюджет токенов. Если не влезет —
+    # truncate_input сам кинет LLMContextOverflowError, пробрасываем
     truncated = truncate_input(
         llm_input,
         model=model,
@@ -642,9 +664,10 @@ def generate_advice(
     )
 
     user_prompt = build_user_prompt(truncated)
+    # оценка только для логов, точное число знает только провайдер
     prompt_tokens_estimate = count_tokens(model, SYSTEM_PROMPT) + count_tokens(model, user_prompt)
 
-    # API-ключ НИКОГДА не логируется — пишем только модель и оценку токенов.
+    # ВАЖНО: api_key сюда НЕ пишем. Никогда. Только название модели и метрики
     logger.info(
         "calling LLM model=%s prompt_tokens~%d max_tokens=%d temperature=%s",
         model,
@@ -655,6 +678,7 @@ def generate_advice(
     logger.debug("=== SYSTEM PROMPT ===\n%s", SYSTEM_PROMPT)
     logger.debug("=== USER PROMPT ===\n%s", user_prompt)
 
+    # формат сообщений как в OpenAI chat completion api
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_prompt},
@@ -663,6 +687,7 @@ def generate_advice(
     rate_cls = getattr(litellm, "RateLimitError", None)
 
     def _do_call() -> Any:
+        # маленький локальный хелпер, чтобы повторить вызов один-в-один при retry
         return litellm.completion(
             model=model,
             messages=messages,
@@ -671,31 +696,38 @@ def generate_advice(
             temperature=temperature,
         )
 
-    started = time.monotonic()
+    started = time.monotonic()  # потом посчитаем сколько шло
     try:
         try:
             response = _do_call()
-        except Exception as err:  # noqa: BLE001 — мапим в свои исключения ниже
-            # Один retry на rate-limit через 5 сек.
+        except Exception as err:  # noqa: BLE001 — ниже мапим в свои классы
+            # если это rate-limit — даём провайдеру пять секунд продохнуть и пробуем ещё раз.
+            # это единственный случай, когда мы реально ретраим
             if rate_cls is not None and isinstance(err, rate_cls):
                 logger.warning("rate limit hit on %s, retrying in 5s", model)
                 time.sleep(5)
                 try:
                     response = _do_call()
                 except Exception as retry_err:  # noqa: BLE001
+                    # и retry тоже не помог — переводим в наш класс
                     raise _map_litellm_error(litellm, retry_err) from retry_err
             else:
+                # любая другая ошибка — сразу мапим без retry
                 raise _map_litellm_error(litellm, err) from err
     except LLMError:
+        # наши собственные ошибки просто прокидываем дальше как есть
         raise
     elapsed = time.monotonic() - started
 
+    # достаём текст ответа. Тут много чего может пойти не так,
+    # поэтому ловим сразу несколько типов исключений
     try:
         content = response.choices[0].message.content
     except (AttributeError, IndexError, KeyError) as err:
         raise LLMError(f"Не удалось извлечь content из ответа LLM: {err}") from err
 
     if content is None:
+        # бывает — модель отказалась отвечать, например по safety-фильтру
         raise LLMError("LLM вернул пустой content.")
 
     logger.info(
@@ -705,9 +737,8 @@ def generate_advice(
         len(content),
     )
 
-    # Для локальных моделей не падаем на отсутствии ключа: litellm обычно
-    # сам справляется. _is_local_model сейчас не меняет логику вызова —
-    # просто фиксируем ожидание для будущих ассертов и для ясности.
+    # _is_local_model сейчас на логику не влияет, но оставлен как "якорь":
+    # удобно будет позже добавить разную обработку ключа для локалок и облака
     _ = _is_local_model(model)
 
     return content
