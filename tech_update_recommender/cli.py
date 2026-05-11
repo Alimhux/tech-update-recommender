@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import Any
 
 import click
-from dotenv import load_dotenv
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
@@ -177,11 +176,6 @@ def scan(
     _VERBOSE_FLAG["value"] = verbose
     _configure_logging(verbose)
 
-    env_file = Path(path) / ".env"
-    if env_file.is_file():
-        load_dotenv(env_file, override=False)
-        logger.debug("loaded .env from %s", env_file)
-
     output = output.lower()
     mode = mode.lower()
 
@@ -262,11 +256,13 @@ def scan(
     # 5. Печать в консоль.
     click.echo(text)
 
-    # 6. Сохранение в файл (всегда в markdown-формате для читаемости).
-    save_path = save if save else (
-        "tech-upd-report.md" if mode in ("advice", "full") else None
-    )
-    if save_path:
+    # 6. Сохранение в файл.
+    if save:
+        # --save указан явно — сохраняем в формате --output.
+        Path(save).write_text(text, encoding="utf-8")
+        click.echo(f"Saved to {save}", err=True)
+    elif mode in ("advice", "full"):
+        # Автосохранение LLM-отчёта в markdown.
         md_text = render_report(
             report,
             fmt="markdown",
@@ -274,8 +270,9 @@ def scan(
             llm_advice=advice if mode != "report" else None,
             llm_model_name=config.llm.model if advice else None,
         )
-        Path(save_path).write_text(md_text, encoding="utf-8")
-        click.echo(f"Saved to {save_path}", err=True)
+        auto_path = "tech-upd-report.md"
+        Path(auto_path).write_text(md_text, encoding="utf-8")
+        click.echo(f"Saved to {auto_path}", err=True)
 
 
 def main() -> None:

@@ -652,6 +652,8 @@ def generate_advice(
         max_tokens,
         temperature,
     )
+    logger.debug("=== SYSTEM PROMPT ===\n%s", SYSTEM_PROMPT)
+    logger.debug("=== USER PROMPT ===\n%s", user_prompt)
 
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
