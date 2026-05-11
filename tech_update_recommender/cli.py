@@ -259,15 +259,22 @@ def scan(
         llm_model_name=config.llm.model if advice else None,
     )
 
-    # 5. Печать и сохранение.
+    # 5. Печать в консоль.
     click.echo(text)
 
-    # Автоматически сохраняем в файл при наличии LLM-рекомендаций.
+    # 6. Сохранение в файл (всегда в markdown-формате для читаемости).
     save_path = save if save else (
         "tech-upd-report.md" if mode in ("advice", "full") else None
     )
     if save_path:
-        Path(save_path).write_text(text, encoding="utf-8")
+        md_text = render_report(
+            report,
+            fmt="markdown",
+            only_outdated=only_outdated,
+            llm_advice=advice if mode != "report" else None,
+            llm_model_name=config.llm.model if advice else None,
+        )
+        Path(save_path).write_text(md_text, encoding="utf-8")
         click.echo(f"Saved to {save_path}", err=True)
 
 
