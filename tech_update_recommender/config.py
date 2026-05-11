@@ -1,12 +1,15 @@
-"""Конфигурация Tech Update Recommender.
+"""Конфиг для Tech Update Recommender.
 
-Каскад источников значений (от высшего приоритета к низшему):
-    1. CLI аргументы (cli_overrides)
+Настройки можно взять из нескольких мест. Чем выше источник в списке,
+тем сильнее его приоритет:
+
+    1. Аргументы из CLI
     2. Переменные окружения
     3. Файл ~/.tech-update-recommender.yaml
-    4. Дефолты, заданные в моделях ниже
+    4. Значения по умолчанию в pydantic-моделях
 
-API-ключи всегда хранятся в pydantic.SecretStr и маскируются в выводе.
+API-ключи храним через SecretStr, чтобы они случайно не светились в логах
+или при печати объекта.
 """
 
 from __future__ import annotations
@@ -26,11 +29,11 @@ DEFAULT_CONFIG_PATH = Path("~/.tech-update-recommender.yaml").expanduser()
 
 
 class ConfigError(Exception):
-    """Базовое исключение конфигурационных проблем Tech Update Recommender."""
+    """Ошибка, связанная с настройками приложения."""
 
 
 class LLMConfig(BaseModel):
-    """Настройки LLM-провайдера."""
+    """Настройки для LLM."""
 
     model: str | None = None
     api_key: SecretStr | None = None
@@ -38,7 +41,7 @@ class LLMConfig(BaseModel):
 
 
 class CacheConfig(BaseModel):
-    """Настройки локального кеша deps.dev."""
+    """Настройки кеша для ответов deps.dev."""
 
     enabled: bool = True
     ttl_seconds: int = 3600
@@ -46,13 +49,13 @@ class CacheConfig(BaseModel):
 
 
 class SyftConfig(BaseModel):
-    """Настройки запуска Syft."""
+    """Настройки для запуска Syft."""
 
     path: str | None = None
 
 
 class Config(BaseModel):
-    """Конечная сложенная конфигурация Tech Update Recommender."""
+    """Итоговый конфиг, который уже использует приложение."""
 
     llm: LLMConfig = Field(default_factory=LLMConfig)
     cache: CacheConfig = Field(default_factory=CacheConfig)
@@ -60,48 +63,54 @@ class Config(BaseModel):
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
-    """Прочитать YAML, вернуть пустой dict, если файла нет/пустой/битый."""
+    """Пробуем прочитать YAML-конфиг."""
+
+    # Если файла нет, это нормально — просто работаем с дефолтами/env/CLI.
     if not path.is_file():
         return {}
+
     try:
         with path.open("r", encoding="utf-8") as fh:
             data = yaml.safe_load(fh) or {}
+
     except (OSError, yaml.YAMLError) as exc:
+        # Конфиг не должен ломать весь запуск, поэтому только предупреждаем.
         logger.warning("Не удалось прочитать конфиг %s: %s", path, exc)
         return {}
+
+    # Ожидаем именно словарь, потому что дальше будем мержить секции конфига.
     if not isinstance(data, dict):
         logger.warning("Конфиг %s не является словарём, игнорируем", path)
         return {}
+
     return data
 
 
 def _env_overrides() -> dict[str, Any]:
-    """Собрать значения из переменных окружения.
+    """Собираем настройки из переменных окружения."""
 
-    Поддерживаются:
-      - TUR_LLM_MODEL
-      - TUR_LLM_API_KEY (общий ключ)
-      - GEMINI_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY (стандартные)
-      - TUR_SYFT_PATH
-    """
     env: dict[str, Any] = {}
     llm: dict[str, Any] = {}
 
+    # Модель можно задать отдельной переменной проекта.
     if model := os.environ.get("TUR_LLM_MODEL"):
         llm["model"] = model
 
+    # Сначала смотрим общий ключ проекта, потом стандартные ключи провайдеров.
     api_key = (
         os.environ.get("TUR_LLM_API_KEY")
         or os.environ.get("GEMINI_API_KEY")
         or os.environ.get("OPENAI_API_KEY")
         or os.environ.get("ANTHROPIC_API_KEY")
     )
+
     if api_key:
         llm["api_key"] = api_key
 
     if llm:
         env["llm"] = llm
 
+    # Syft тоже можно указать через env, если бинарник лежит не в PATH.
     if syft_path := os.environ.get("TUR_SYFT_PATH"):
         env["syft"] = {"path": syft_path}
 
@@ -109,29 +118,32 @@ def _env_overrides() -> dict[str, Any]:
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
-    """Глубокое слияние двух словарей. `override` побеждает."""
+    """Склеиваем два словаря, причём override имеет больший приоритет."""
+
     result = dict(base)
+
     for key, value in override.items():
+        # None не считаем настоящим значением, чтобы он не затирал старые настройки.
         if value is None:
             continue
+
+        # Если обе стороны — словари, мержим их рекурсивно.
         if key in result and isinstance(result[key], dict) and isinstance(value, dict):
             result[key] = _deep_merge(result[key], value)
         else:
             result[key] = value
+
     return result
 
 
 def _normalize_cli_overrides(cli_overrides: dict[str, Any]) -> dict[str, Any]:
-    """Привести плоские CLI-аргументы к вложенной структуре Config.
+    """Переводим плоские CLI-аргументы в структуру Config."""
 
-    Принимаются ключи:
-      llm_model, llm_api_key, syft_path, cache_*, ...
-    Неизвестные ключи игнорируются.
-    """
     nested: dict[str, Any] = {}
     llm: dict[str, Any] = {}
     syft: dict[str, Any] = {}
 
+    # Click отдаёт параметры плоско, а Config ожидает вложенные секции.
     if (model := cli_overrides.get("llm_model")) is not None:
         llm["model"] = model
     if (api_key := cli_overrides.get("llm_api_key")) is not None:
@@ -145,6 +157,7 @@ def _normalize_cli_overrides(cli_overrides: dict[str, Any]) -> dict[str, Any]:
         nested["llm"] = llm
     if syft:
         nested["syft"] = syft
+
     return nested
 
 
@@ -152,21 +165,22 @@ def load_config(
     cli_overrides: dict[str, Any] | None = None,
     config_path: Path | None = None,
 ) -> Config:
-    """Загрузить конфигурацию с каскадом источников.
+    """Загружаем конфиг из файла, env и CLI."""
 
-    Порядок (последний побеждает):
-        defaults < ~/.tech-update-recommender.yaml < env vars < cli_overrides
-    """
     cli_overrides = cli_overrides or {}
     path = config_path if config_path is not None else DEFAULT_CONFIG_PATH
 
+    # Сначала читаем каждый источник отдельно.
     yaml_data = _read_yaml(path)
     env_data = _env_overrides()
     cli_data = _normalize_cli_overrides(cli_overrides)
 
+    # Потом накладываем их друг на друга в порядке приоритета.
+    # Чем позже источник, тем важнее его значения.
     merged: dict[str, Any] = {}
     merged = _deep_merge(merged, yaml_data)
     merged = _deep_merge(merged, env_data)
     merged = _deep_merge(merged, cli_data)
 
+    # Pydantic проверит типы и соберёт нормальный Config-объект.
     return Config.model_validate(merged)

@@ -1,10 +1,13 @@
-"""CLI Tech Update Recommender.
+"""CLI для Tech Update Recommender.
 
-Финальный pipeline (Блок 6): Syft → deps.dev → (опционально) LLM → отчёт.
+Это финальный пайплайн: сначала сканируем проект через Syft,
+потом подтягиваем данные из deps.dev, при необходимости просим LLM
+дать рекомендации и в конце собираем отчёт.
 
-Точка входа — функция :func:`main`, вызываемая через ``console_scripts``.
-Прогресс-бары пишутся в stderr через ``rich.progress.Progress``, чтобы
-не портить ``stdout`` при выводе JSON.
+Точка входа — main(), она вызывается через console_scripts.
+
+Прогресс показываем через rich в stderr, чтобы не смешивать его
+с основным выводом в stdout, особенно если пользователь выбрал JSON.
 """
 
 from __future__ import annotations
@@ -30,20 +33,18 @@ from tech_update_recommender.syft_module import SyftError, scan_project
 logger = logging.getLogger("tech_update_recommender")
 
 
-# ---------------------------------------------------------------------------
-# Глобальный флаг --verbose для main(): нужен, чтобы решить — печатать
-# короткое сообщение или полный traceback при неожиданной ошибке.
-# Click устанавливает его внутри scan(), main() читает.
-# ---------------------------------------------------------------------------
+# Тут храним значение --verbose.
+# Нужно это для main(): если случится неожиданная ошибка, надо понять,
+# показывать полный traceback или просто короткое сообщение.
 _VERBOSE_FLAG = {"value": False}
 
 
 def _configure_logging(verbose: bool) -> None:
-    """Настроить корневой логгер DepScope.
+    """Настраиваем логирование для приложения."""
 
-    --verbose => DEBUG, иначе WARNING. Никаких print() для статуса.
-    """
+    # В verbose-режиме показываем больше деталей, иначе только предупреждения и ошибки.
     level = logging.DEBUG if verbose else logging.WARNING
+
     logging.basicConfig(
         level=level,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -52,8 +53,9 @@ def _configure_logging(verbose: bool) -> None:
 
 
 def _make_progress() -> Progress:
-    """Прогресс-бар, пишущий в stderr (чтобы не портить stdout с JSON)."""
+    """Создаём прогресс-бар для долгих шагов."""
 
+    # Пишем именно в stderr, чтобы stdout оставался чистым для отчёта или JSON.
     return Progress(
         SpinnerColumn(),
         TextColumn("{task.description}"),
@@ -69,9 +71,12 @@ def _build_cli_overrides(
     syft_path: str | None,
     no_llm: bool,
 ) -> dict[str, Any]:
-    """Собрать словарь cli_overrides для load_config."""
+    """Собираем настройки, которые пользователь передал через CLI."""
 
     overrides: dict[str, Any] = {}
+
+    # Добавляем только те параметры, которые реально были переданы.
+    # Остальное load_config возьмёт из env или конфиг-файла.
     if llm_model is not None:
         overrides["llm_model"] = llm_model
     if llm_api_key is not None:
@@ -80,6 +85,7 @@ def _build_cli_overrides(
         overrides["max_context_tokens"] = max_context_tokens
     if syft_path is not None:
         overrides["syft_path"] = syft_path
+
     return overrides
 
 
@@ -171,7 +177,7 @@ def scan(
     syft_path: str | None,
     verbose: bool,
 ) -> None:
-    """Просканировать проект по PATH и вывести отчёт о зависимостях."""
+    """Сканируем проект по PATH и выводим отчёт по зависимостям."""
 
     _VERBOSE_FLAG["value"] = verbose
     _configure_logging(verbose)
@@ -179,7 +185,7 @@ def scan(
     output = output.lower()
     mode = mode.lower()
 
-    # --no-llm форсирует режим report (даже если пользователь указал full/advice).
+    # Если пользователь явно отключил LLM, то оставляем только обычный отчёт.
     if no_llm and mode != "report":
         logger.info("--no-llm передан вместе с --mode=%s, режим понижен до report", mode)
         mode = "report"
@@ -191,6 +197,7 @@ def scan(
         syft_path,
         no_llm,
     )
+
     config = load_config(cli_overrides)
 
     logger.debug(
@@ -206,53 +213,65 @@ def scan(
         config.syft.path,
     )
 
+    # Для режимов с LLM обязательно должна быть указана модель.
     if mode in ("advice", "full") and not config.llm.model:
         raise ConfigError(
             "Для режима --mode=" + mode + " нужно указать LLM-модель: "
             "через --llm-model, env var TUR_LLM_MODEL или ~/.tech-update-recommender.yaml."
         )
 
-    # 1. SyftModule
+    # Шаг 1: сканируем проект через Syft и получаем список зависимостей.
     with _make_progress() as progress:
         task_id = progress.add_task("Scanning project with syft...", total=None)
         supported, unsupported = scan_project(path, syft_path=config.syft.path)
         progress.update(task_id, completed=1)
 
-    # 2. DepsDevModule
+    # Шаг 2: идём в deps.dev и собираем фактический отчёт.
     cache = Cache(
         path=Path(config.cache.path).expanduser(),
         ttl_seconds=config.cache.ttl_seconds,
     )
+
     try:
         with _make_progress() as progress:
             task_id = progress.add_task("Querying deps.dev...", total=None)
             report = asyncio.run(build_report(supported, unsupported, path, cache))
             progress.update(task_id, completed=1)
     finally:
+        # Кеш открывает SQLite-соединение, поэтому его лучше закрыть явно.
         cache.close()
 
-    # 3. LLMModule (опционально)
+    # Шаг 3: если нужен advice/full, просим LLM написать рекомендации.
     advice: str | None = None
+
     if mode in ("advice", "full"):
         with _make_progress() as progress:
             task_id = progress.add_task("Generating AI advice...", total=None)
+
             llm_input = build_llm_input(report, path)
+
             api_key_value: str | None = None
             if config.llm.api_key is not None:
                 api_key_value = config.llm.api_key.get_secret_value()
+
             advice = generate_advice(
                 llm_input,
                 model=config.llm.model,
                 api_key=api_key_value,
                 max_context_tokens=config.llm.max_context_tokens,
             )
+
             progress.update(task_id, completed=1)
 
-    # 4. ReportModule + вывод / сохранение
+    # Шаг 4: собираем финальный отчёт и либо печатаем его, либо сохраняем.
     if mode in ("advice", "full"):
-        # LLM-режим: сохраняем в файл, в консоль отчёт не выводим.
+        # В LLM-режимах отчёт сохраняем в файл.
+        # Так удобнее, потому что рекомендации могут быть длинными.
         save_path = save or "tech-upd-report.md"
+
+        # Если пользователь не указал --save, по умолчанию сохраняем Markdown.
         save_fmt = output if save else "markdown"
+
         text = render_report(
             report,
             fmt=save_fmt,
@@ -260,54 +279,70 @@ def scan(
             llm_advice=advice,
             llm_model_name=config.llm.model if advice else None,
         )
+
         Path(save_path).write_text(text, encoding="utf-8")
         click.echo(f"Все рекомендации записаны в {save_path}", err=True)
     else:
-        # Режим report: вывод в консоль.
+        # В обычном режиме просто печатаем отчёт в консоль.
         text = render_report(
             report,
             fmt=output,
             only_outdated=only_outdated,
         )
+
         click.echo(text)
+
+        # Но если пользователь дал --save, дополнительно сохраняем в файл.
         if save:
             Path(save).write_text(text, encoding="utf-8")
             click.echo(f"Saved to {save}", err=True)
 
 
 def main() -> None:
-    """Entry point для console_scripts с обработкой ошибок верхнего уровня."""
+    """Точка входа для console_scripts и общая обработка ошибок."""
 
     try:
         cli(standalone_mode=False)
+
     except click.exceptions.UsageError as exc:
-        # Click сам форматирует UsageError; печатаем и выходим с его кодом.
+        # Ошибки в аргументах Click умеет красиво показывать сам.
         exc.show()
         sys.exit(exc.exit_code)
+
     except click.exceptions.Abort:
         click.echo("Отменено пользователем", err=True)
         sys.exit(130)
+
     except SyftError as exc:
         click.echo(f"[syft] {exc}", err=True)
         sys.exit(2)
+
     except DepsDevError as exc:
         click.echo(f"[deps.dev] {exc}", err=True)
         sys.exit(3)
+
     except LLMError as exc:
         click.echo(f"[llm] {exc}", err=True)
         sys.exit(4)
+
     except ConfigError as exc:
         click.echo(f"[config] {exc}", err=True)
         sys.exit(5)
+
     except KeyboardInterrupt:
         click.echo("Отменено пользователем", err=True)
         sys.exit(130)
+
     except SystemExit:
-        # Прокидываем дальше — Click ловит --version, --help, и т.п. через SystemExit.
+        # Не мешаем Click нормально обрабатывать --help, --version и похожие случаи.
         raise
+
     except Exception as exc:
+        # Для неожиданных ошибок без --verbose показываем короткое сообщение.
+        # А с --verbose даём обычный traceback, чтобы было проще дебажить.
         if _VERBOSE_FLAG["value"]:
             raise
+
         click.echo(
             f"Ошибка: {exc}\nЗапустите с --verbose для подробного traceback.",
             err=True,
