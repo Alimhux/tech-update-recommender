@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tech-upd-recommender"
-version = "0.2.2"
+version = "0.4.0"
 description = "Open-source CLI utility for local dependency analysis with AI-powered update recommendations."
 readme = "README.md"
 requires-python = ">=3.11"

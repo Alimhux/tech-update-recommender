@@ -100,9 +100,11 @@ def test_full_pipeline_with_mocks(
     tmp_path: Path,
     mock_packages: tuple[list[PackageInfo], list[PackageInfo]],
     mock_full_report: FullReport,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Полный pipeline в режиме full: syft → deps.dev → LLM → markdown."""
+    """Полный pipeline в режиме full: syft → deps.dev → LLM → файл (не в консоль)."""
 
+    monkeypatch.chdir(tmp_path)
     runner = CliRunner()
     project = _project_path(tmp_path)
 
@@ -138,11 +140,16 @@ def test_full_pipeline_with_mocks(
         )
 
     assert result.exit_code == 0, result.output
-    assert "# Tech Update Recommender Report" in result.output
-    # advice должен попасть в вывод (через render_report)
-    assert "# Test advice" in result.output
-    # дисклеймер должен присутствовать с именем модели
-    assert "test/model" in result.output
+    # Отчёт НЕ выводится в stdout — только сообщение о сохранении в stderr.
+    assert "tech-upd-report.md" in result.output
+
+    # Отчёт записан в файл.
+    report_file = tmp_path / "tech-upd-report.md"
+    assert report_file.is_file()
+    content = report_file.read_text(encoding="utf-8")
+    assert "# Tech Update Recommender Report" in content
+    assert "# Test advice" in content
+    assert "test/model" in content
 
     scan_mock.assert_called_once()
     build_mock.assert_called_once()

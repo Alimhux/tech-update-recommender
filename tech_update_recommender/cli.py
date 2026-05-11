@@ -185,7 +185,11 @@ def scan(
         mode = "report"
 
     cli_overrides = _build_cli_overrides(
-        llm_model, llm_api_key, max_context_tokens, syft_path, no_llm,
+        llm_model,
+        llm_api_key,
+        max_context_tokens,
+        syft_path,
+        no_llm,
     )
     config = load_config(cli_overrides)
 
@@ -244,35 +248,31 @@ def scan(
             )
             progress.update(task_id, completed=1)
 
-    # 4. ReportModule
-    text = render_report(
-        report,
-        fmt=output,
-        only_outdated=only_outdated,
-        llm_advice=advice if mode != "report" else None,
-        llm_model_name=config.llm.model if advice else None,
-    )
-
-    # 5. Печать в консоль.
-    click.echo(text)
-
-    # 6. Сохранение в файл.
-    if save:
-        # --save указан явно — сохраняем в формате --output.
-        Path(save).write_text(text, encoding="utf-8")
-        click.echo(f"Saved to {save}", err=True)
-    elif mode in ("advice", "full"):
-        # Автосохранение LLM-отчёта в markdown.
-        md_text = render_report(
+    # 4. ReportModule + вывод / сохранение
+    if mode in ("advice", "full"):
+        # LLM-режим: сохраняем в файл, в консоль отчёт не выводим.
+        save_path = save or "tech-upd-report.md"
+        save_fmt = output if save else "markdown"
+        text = render_report(
             report,
-            fmt="markdown",
+            fmt=save_fmt,
             only_outdated=only_outdated,
-            llm_advice=advice if mode != "report" else None,
+            llm_advice=advice,
             llm_model_name=config.llm.model if advice else None,
         )
-        auto_path = "tech-upd-report.md"
-        Path(auto_path).write_text(md_text, encoding="utf-8")
-        click.echo(f"Saved to {auto_path}", err=True)
+        Path(save_path).write_text(text, encoding="utf-8")
+        click.echo(f"Все рекомендации записаны в {save_path}", err=True)
+    else:
+        # Режим report: вывод в консоль.
+        text = render_report(
+            report,
+            fmt=output,
+            only_outdated=only_outdated,
+        )
+        click.echo(text)
+        if save:
+            Path(save).write_text(text, encoding="utf-8")
+            click.echo(f"Saved to {save}", err=True)
 
 
 def main() -> None:
