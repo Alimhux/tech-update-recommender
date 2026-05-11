@@ -54,17 +54,17 @@ tech-upd-recommender scan ./my-project
 
 # 2. Полный отчёт с AI-рекомендациями (Gemini):
 
-__Экспортируйте переменные окружения__
-export OPENAI_GEMINI_KEY=ваш_api_ключ
+# Экспортируйте переменные окружения
+# export OPENAI_GEMINI_KEY=ваш_api_ключ
 
 tech-upd-recommender scan ./my-project --mode full \
     --llm-model gemini/gemini-2.0-flash
 
 # 3. С OpenAI-совместимым провайдером (Yandex Cloud, DeepSeek и т.п.):
 
-__Экспортируйте переменные окружения__
-export OPENAI_API_BASE=https://ai.api.cloud.yandex.net/v1
-export OPENAI_API_KEY=ваш_api_ключ
+# Экспортируйте переменные окружения
+# export OPENAI_API_BASE=https://ai.api.cloud.yandex.net/v1
+# export OPENAI_API_KEY=ваш_api_ключ
 
 tech-upd-recommender scan ./my-project --mode full \
     --llm-model "openai/gpt://folder_id/model_name"
