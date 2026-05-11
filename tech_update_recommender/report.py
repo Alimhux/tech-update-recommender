@@ -1,10 +1,7 @@
-"""ReportModule — рендер ``FullReport`` в table / json / markdown.
-
-Модуль не делает сетевых вызовов и ничего не печатает сам — только
-возвращает строку, готовую для вывода в stdout или сохранения в файл.
-
-Контракт см. в ``docs/blocks/04-report-module.md``.
-"""
+# Превращаем FullReport в человекочитаемый вывод.
+# Поддерживаем три формата: table (rich), json и markdown.
+# Сам модуль ничего не печатает и не пишет в файлы — только
+# возвращает строку. Решать, куда её девать, — задача CLI.
 
 from __future__ import annotations
 
@@ -17,21 +14,21 @@ from rich.table import Table
 
 from tech_update_recommender.models import DependencyReport, FullReport
 
-# ---------------------------------------------------------------------------
-# Константы
-# ---------------------------------------------------------------------------
+# --- константы ------------------------------------------------------------
 
-#: Точный текст дисклеймера LLM-секции (см. PLAN.md).
-#: ``{model_name}`` подставляется через ``str.format``.
+# Дисклеймер обязан выводиться рядом с любым LLM-блоком. Точный текст
+# зафиксирован в PLAN.md — менять формулировки нельзя, иначе тесты
+# отвалятся, да и пользователь не обязан догадываться, что советы
+# написала нейронка.
 LLM_DISCLAIMER_TEMPLATE = (
-    "⚠️ Рекомендации ниже сгенерированы AI-моделью ({model_name}) и носят "
+    "Рекомендации ниже сгенерированы AI-моделью ({model_name}) и носят "
     "рекомендательный характер. Качество рекомендаций зависит от выбранной "
     "модели. Всегда проверяйте совместимость обновлений в вашем проекте "
     "перед применением."
 )
 
-#: Заголовки колонок таблицы зависимостей. Используются и в ``rich``,
-#: и в markdown-выводе, чтобы тексты совпадали.
+# Один и тот же набор колонок и для rich-таблицы, и для markdown.
+# Если поменять порядок — поправится сразу в обоих местах.
 TABLE_COLUMNS = (
     "Name",
     "Ecosystem",
@@ -42,43 +39,34 @@ TABLE_COLUMNS = (
 )
 
 
-# ---------------------------------------------------------------------------
-# Вспомогательные функции
-# ---------------------------------------------------------------------------
+# --- хелперы --------------------------------------------------------------
 
 
 def _filter_supported(deps: list[DependencyReport], only_outdated: bool) -> list[DependencyReport]:
-    """Применить фильтр ``--only-outdated`` к списку supported-пакетов."""
-
+    # Флаг --only-outdated скрывает актуальные пакеты из таблицы.
+    # В json он же — но реализован отдельно, на копии модели.
     if not only_outdated:
         return list(deps)
     return [d for d in deps if d.is_outdated]
 
 
 def _row_color(dep: DependencyReport) -> str:
-    """Возвращает имя цвета (``rich`` style) для строки таблицы.
-
-    Приоритет: advisories > major > minor/patch > актуальные.
-    """
-
+    # Цвет строки таблицы. Приоритет такой:
+    # уязвимости — красный, major — жёлтый, minor/patch — зелёный,
+    # всё остальное (актуальные и битые версии) — серый.
     if dep.advisories:
         return "red"
     if dep.semver_diff == "major":
         return "yellow"
     if dep.semver_diff in ("minor", "patch"):
         return "green"
-    # Невалидная версия (is_outdated=True, semver_diff=None) и
-    # актуальные пакеты попадают в серый.
     return "grey50"
 
 
 def _diff_label(dep: DependencyReport) -> str:
-    """Текст для колонки ``Diff``.
-
-    Особый кейс: ``is_outdated=True`` без ``semver_diff`` — показываем
-    ``?``, чтобы было видно, что версия не парсится.
-    """
-
+    # В колонке Diff пишем «major/minor/patch», либо «?» если знаем,
+    # что версия устарела, но diff не посчитался (версия не SemVer),
+    # либо тире — когда версия актуальна.
     if dep.semver_diff is not None:
         return dep.semver_diff
     if dep.is_outdated:
@@ -87,20 +75,17 @@ def _diff_label(dep: DependencyReport) -> str:
 
 
 def _advisories_label(dep: DependencyReport) -> str:
-    """Список advisory-id через запятую или ``—`` если пусто."""
-
+    # Просто id-шники CVE/GHSA через запятую. Полные описания
+    # не выводим — в табличку они не влезут.
     if not dep.advisories:
         return "—"
     return ", ".join(a.id for a in dep.advisories)
 
 
 def _summary_line(report: FullReport) -> str:
-    """Однострочное summary поверх отчёта.
-
-    Считается ВСЕГДА по полному ``FullReport`` (не зависит от
-    ``only_outdated``).
-    """
-
+    # Однострочная сводка над таблицей. Считаем по полному отчёту,
+    # а не по отфильтрованному — пользователю важно видеть общую
+    # картину, даже если он включил --only-outdated.
     return (
         f"Total: {report.total_packages}, "
         f"outdated: {report.outdated_count}, "
@@ -109,18 +94,16 @@ def _summary_line(report: FullReport) -> str:
 
 
 def _unsupported_summary(report: FullReport) -> str | None:
-    """Текст секции unsupported или ``None`` если их нет."""
-
+    # Короткая фраза «вот эти пакеты deps.dev не знает». Если их нет —
+    # возвращаем None, чтобы вызывающий код не печатал пустую секцию.
     if not report.unsupported:
         return None
     return (
-        f"⚠ Не проверено через deps.dev: {len(report.unsupported)} системных пакетов (deb/apk/rpm)"
+        f"Не проверено через deps.dev: {len(report.unsupported)} системных пакетов (deb/apk/rpm)"
     )
 
 
-# ---------------------------------------------------------------------------
-# Формат table (rich)
-# ---------------------------------------------------------------------------
+# --- формат table ---------------------------------------------------------
 
 
 def _render_table(
@@ -129,13 +112,11 @@ def _render_table(
     llm_advice: str | None,
     llm_model_name: str | None,
 ) -> str:
-    """Сформировать table-вывод через ``rich.console.Console(record=True)``."""
-
-    # ``no_color=True`` плюс ``styles=False`` в export_text — детерминированный
-    # текстовый вывод без ANSI, удобный для тестов. Стили остаются в Table
-    # для случая, когда вывод печатают напрямую через console.print().
-    # ``soft_wrap=True`` отключает жёсткий перенос длинных строк (важно для
-    # дисклеймера и LLM-текста, чтобы тесты находили их подстрокой).
+    # Внутри прячем rich-консоль с record=True, чтобы потом получить
+    # чистую строку. force_terminal=False и no_color=True убивают
+    # ANSI-эскейпы — это удобно и для тестов, и при перенаправлении в
+    # файл. soft_wrap отключает жёсткий перенос: длинные строки с
+    # дисклеймером и LLM-текстом тесты ищут как одну подстроку.
     console = Console(
         record=True,
         file=io.StringIO(),
@@ -185,16 +166,13 @@ def _render_table(
     return console.export_text(styles=False)
 
 
-# ---------------------------------------------------------------------------
-# Формат json
-# ---------------------------------------------------------------------------
+# --- формат json ----------------------------------------------------------
 
 
 def _json_default(obj: Any) -> str:
-    """Сериализация типов, которые ``json`` сам не умеет (datetime → ISO 8601)."""
-
-    # Pydantic 2 уже сериализует datetime через model_dump(mode="json"),
-    # но на всякий случай оставляем fallback.
+    # Подстраховка на случай, если в дамп просочится что-то, что
+    # стандартный json не умеет сериализовать. Сейчас pydantic с
+    # mode="json" сам приводит datetime к ISO 8601, но мало ли.
     if hasattr(obj, "isoformat"):
         return obj.isoformat()
     raise TypeError(f"Object of type {type(obj)!r} is not JSON serializable")
@@ -205,16 +183,18 @@ def _render_json(
     only_outdated: bool,
     llm_advice: str | None,
 ) -> str:
-    """JSON-вывод. Не мутирует исходный ``FullReport``."""
-
-    # Если есть фильтр — клонируем модель, чтобы не трогать оригинал.
+    # Если стоит --only-outdated, делаем глубокую копию и режем
+    # supported уже на ней. Оригинальный FullReport остаётся целым —
+    # это важно, потому что один и тот же объект может потом
+    # отдаваться в LLM или повторно рендериться.
     if only_outdated:
         working = report.model_copy(deep=True)
         working.supported = _filter_supported(working.supported, only_outdated=True)
     else:
         working = report
 
-    # ``model_dump(mode="json")`` сериализует datetime в ISO 8601 строку.
+    # mode="json" — это то, что разворачивает datetime, SecretStr и
+    # прочую pydantic-магию в обычные JSON-типы.
     data = working.model_dump(mode="json")
 
     if llm_advice is not None:
@@ -223,14 +203,12 @@ def _render_json(
     return json.dumps(data, indent=2, ensure_ascii=False, default=_json_default)
 
 
-# ---------------------------------------------------------------------------
-# Формат markdown
-# ---------------------------------------------------------------------------
+# --- формат markdown ------------------------------------------------------
 
 
 def _md_escape_pipe(text: str) -> str:
-    """Экранировать ``|`` внутри markdown-таблицы."""
-
+    # Внутри ячеек markdown-таблицы вертикальная черта обязана быть
+    # экранирована, иначе таблица «поедет».
     return text.replace("|", "\\|")
 
 
@@ -240,7 +218,7 @@ def _render_markdown(
     llm_advice: str | None,
     llm_model_name: str | None,
 ) -> str:
-    """Markdown-отчёт со всеми секциями."""
+    # Собираем markdown построчно — выходит проще, чем городить шаблоны.
 
     lines: list[str] = []
     lines.append("# Tech Update Recommender Report")
@@ -255,7 +233,8 @@ def _render_markdown(
     )
     lines.append("")
 
-    # Таблица зависимостей
+    # Шапка и разделитель таблицы. Колонки берём из TABLE_COLUMNS,
+    # чтобы было синхронно с rich-вариантом.
     lines.append("| " + " | ".join(TABLE_COLUMNS) + " |")
     lines.append("|" + "|".join(["------"] * len(TABLE_COLUMNS)) + "|")
 
@@ -272,7 +251,7 @@ def _render_markdown(
         ]
         lines.append("| " + " | ".join(cells) + " |")
 
-    # Секция unsupported
+    # Системные пакеты — отдельной секцией снизу, просто списком.
     if report.unsupported:
         lines.append("")
         lines.append("## Unsupported packages")
@@ -285,7 +264,7 @@ def _render_markdown(
         for pkg in report.unsupported:
             lines.append(f"- {pkg.name}@{pkg.version} ({pkg.ecosystem})")
 
-    # Секция LLM-рекомендаций
+    # И отдельным блоком — рекомендации от модели, если были.
     if llm_advice is not None:
         lines.append("")
         lines.append("## AI-рекомендации")
@@ -295,14 +274,12 @@ def _render_markdown(
         lines.append("")
         lines.append(llm_advice)
 
-    # Финальный перевод строки для аккуратного файла.
+    # Финальный \n, чтобы файл заканчивался переводом строки.
     lines.append("")
     return "\n".join(lines)
 
 
-# ---------------------------------------------------------------------------
-# Публичный API
-# ---------------------------------------------------------------------------
+# --- единственная публичная функция --------------------------------------
 
 
 def render_report(
@@ -312,21 +289,11 @@ def render_report(
     llm_advice: str | None = None,
     llm_model_name: str | None = None,
 ) -> str:
-    """Отрисовать ``FullReport`` в выбранном формате.
-
-    Параметры:
-        report: исходный отчёт DepsDevModule.
-        fmt: один из ``"table"``, ``"json"``, ``"markdown"``.
-        only_outdated: если ``True`` — supported-пакеты, не помеченные
-            ``is_outdated``, исключаются из вывода. Summary всегда
-            считается по полному отчёту, unsupported остаются как есть.
-        llm_advice: готовая markdown-строка с LLM-рекомендациями.
-            Если задано — добавляется отдельной секцией (table/markdown)
-            или полем верхнего уровня (json).
-        llm_model_name: имя модели для подстановки в дисклеймер.
-
-    Возвращает строку — функция ничего не печатает.
-    """
+    # Простой диспетчер. Сам ничего не делает, только зовёт нужный
+    # рендерер. only_outdated прячет актуальные пакеты, но summary
+    # всё равно считается по полному отчёту. llm_advice — уже готовая
+    # markdown-строка от LLM-модуля; если она есть, рядом обязательно
+    # добавляется дисклеймер с именем модели.
 
     if fmt == "table":
         return _render_table(report, only_outdated, llm_advice, llm_model_name)
