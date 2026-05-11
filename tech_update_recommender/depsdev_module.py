@@ -1,19 +1,14 @@
-"""DepsDevModule — взаимодействие с deps.dev API.
+"""
+depsdev module - это модуль для взаимодействия системы с API от deps.dev
 
-Что делает модуль:
-1. По списку ``PackageInfo`` (только supported экосистемы) запрашивает
-   через batch endpoint ``v3alpha/versionbatch`` информацию о
-   *текущих* версиях (advisories, лицензии и пр.).
-2. Параллельно (с дедупликацией по ``(system, name)``) запрашивает через
-   ``v3/systems/{system}/packages/{name}`` *latest*-версии.
-3. Использует SQLite-кеш с TTL, чтобы не дёргать API при повторных
-   запусках.
-4. Сводит результаты в ``FullReport``.
+Модуль запрашивает у deps.dev информацию о последних версиях пакетов,
+найдённых в анализируемом проекте, и о наличии у них известных уязвимостей.
+Эти данные нужны для построения рекомендаций по обновлению зависимостей.
 
-Все HTTP-запросы — async через ``aiohttp``. Один ``ClientSession`` на
-build_report. Retry: 3 попытки с экспоненциальным бэкоффом на 5xx и
-сетевые ошибки. 4xx (включая 404) НЕ retry — обрабатываем как «нет
-данных».
+Модуль использует SQLite-кеш, чтобы не обращаться к API при повторных
+запусках, а также сводит результаты в FullReport из models.py
+
+Все HTTP-запросы асинхронные, работают через aiohttp
 """
 
 from __future__ import annotations
@@ -43,11 +38,6 @@ from tech_update_recommender.utils import (
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Константы
-# ---------------------------------------------------------------------------
-
-
 DEPSDEV_BATCH_URL = "https://api.deps.dev/v3alpha/versionbatch"
 DEPSDEV_PACKAGE_URL_TPL = "https://api.deps.dev/v3/systems/{system}/packages/{name}"
 
@@ -57,11 +47,7 @@ BATCH_CHUNK_SIZE = 5000
 GETPACKAGE_CONCURRENCY = 20
 
 
-# ---------------------------------------------------------------------------
 # Исключения
-# ---------------------------------------------------------------------------
-
-
 class DepsDevError(Exception):
     """Базовое исключение DepsDevModule."""
 
@@ -84,11 +70,8 @@ async def _with_retry(
     retries: int = MAX_RETRIES,
     label: str = "request",
 ) -> aiohttp.ClientResponse:
-    """Выполнить async-операцию с retry на 5xx и сетевые ошибки.
-
-    4xx (в частности 404) **не** перевызываем — это валидное «нет данных».
-    Возвращаем последний ответ (с уже прочитанным телом), либо кидаем
-    ``DepsDevError`` если все попытки упали с сетевой ошибкой.
+    """Выполнить async-операцию с retry на 5xx и сетевые ошибки, либо прокидываем
+    DepsDevError если все попытки упали с сетевой ошибкой.
     """
 
     last_exc: Exception | None = None
@@ -134,16 +117,12 @@ async def _with_retry(
     raise DepsDevError(f"deps.dev API недоступен после {retries} попыток: {last_exc}")
 
 
-# ---------------------------------------------------------------------------
 # 3.2 Batch-запрос текущих версий
-# ---------------------------------------------------------------------------
-
-
 def _batch_request_payload(packages: list[PackageInfo]) -> dict:
-    """Собрать payload для POST /v3alpha/versionbatch.
+    """Собирает payload для POST /v3alpha/versionbatch.
 
     Имя пакета в payload передаётся в каноничной для deps.dev форме:
-    PyPI — нормализуется, остальные — как есть.
+    модули от pypi — нормализуются, остальные — используются как есть.
     """
 
     requests = []
@@ -163,21 +142,13 @@ def _batch_request_payload(packages: list[PackageInfo]) -> dict:
 
 
 def _canonical_name(package: PackageInfo, system: str) -> str:
-    """Каноничное имя пакета для deps.dev (для payload и ключа кеша).
-
-    Учитывает специфику экосистем:
-    - PyPI: lowercase + ``_`` → ``-``;
-    - Golang: если в purl есть namespace — склеиваем ``namespace/name``;
-    - Maven: имя уже сохранено как ``groupId:artifactId`` (это делает
-      SyftModule);
-    - остальные: как есть.
-    """
+    """Преобразует в каноничное имя пакета для deps.dev (для payload и ключа кеша)."""
 
     if system == "PYPI":
         return normalize_pypi_name(package.name)
 
     if system == "GO":
-        # SyftModule сохраняет в .name только ``purl.name`` без namespace.
+        # SyftModule сохраняет в .name только purl.name без namespace.
         # Для go нам нужен полный путь модуля, так что читаем его из purl.
         try:
             purl = PackageURL.from_string(package.purl)
@@ -197,9 +168,8 @@ async def fetch_current_versions(
 ) -> dict[tuple[str, str, str], dict | None]:
     """Запросить через batch endpoint данные по текущим версиям пакетов.
 
-    Возвращает словарь ``(system, name, version) -> response_payload``.
-    Ключ ``name`` в результате — каноничное имя (то, что отправляли в
-    запрос); вызывающий код использует ту же канонизацию при поиске.
+    Возвращает словарь (system, name, version) : response_payload.
+    Ключ name в результате - каноничное имя
     """
 
     if not packages:
@@ -207,7 +177,7 @@ async def fetch_current_versions(
 
     result: dict[tuple[str, str, str], dict | None] = {}
 
-    # Чанкируем (хотя 5000 пакетов на запуск маловероятно — но требование).
+    # делаем чанки (хотя 5000 пакетов на запуск маловероятно — но требование).
     for start in range(0, len(packages), BATCH_CHUNK_SIZE):
         chunk = packages[start : start + BATCH_CHUNK_SIZE]
         payload = _batch_request_payload(chunk)
@@ -221,10 +191,6 @@ async def fetch_current_versions(
         finally:
             response.release()
 
-        # deps.dev v3alpha/versionbatch возвращает либо
-        # {"responses": [{"request": {...}, "version": {...}}, ...]}
-        # либо {"responses": [{"versionKey": {...}, "version": {...}}, ...]}
-        # либо `version` может отсутствовать (пакет не найден).
         responses = data.get("responses") or []
         for entry in responses:
             key = _extract_batch_key(entry)
@@ -244,12 +210,6 @@ async def fetch_current_versions(
 
 
 def _extract_batch_key(entry: dict) -> tuple[str, str, str] | None:
-    """Достать ``(system, name, version)`` из одного response-элемента.
-
-    deps.dev в разных версиях ответа кладёт ключ либо в
-    ``request.versionKey``, либо непосредственно в ``versionKey``. Учитываем
-    оба варианта.
-    """
 
     vk = entry.get("versionKey")
     if vk is None:
@@ -265,18 +225,16 @@ def _extract_batch_key(entry: dict) -> tuple[str, str, str] | None:
     return system, name, version
 
 
-# ---------------------------------------------------------------------------
-# 3.3 GetPackage для latest
-# ---------------------------------------------------------------------------
+# 3.3 GetPackage для последних версий (latest)
 
 
 async def fetch_latest_versions(
     session: aiohttp.ClientSession,
     packages: list[PackageInfo],
 ) -> dict[tuple[str, str], str | None]:
-    """Запросить latest-версию для каждого уникального ``(system, name)``.
+    """Запросить последнюю версию для каждого уникального (system, name).
 
-    Параллельность ограничена семафором (``GETPACKAGE_CONCURRENCY``).
+    Параллельность ограничена семафором (GETPACKAGE_CONCURRENCY).
     Дедупликация идёт по каноническому имени (PyPI lowercase, Golang
     namespace+name).
     """
@@ -284,7 +242,7 @@ async def fetch_latest_versions(
     if not packages:
         return {}
 
-    # Дедуп по канон. ключу (system, canonical_name).
+    # Дедупликация по ключу (system, canonical_name).
     pairs: dict[tuple[str, str], None] = {}
     for p in packages:
         system = SUPPORTED_ECOSYSTEMS[p.ecosystem]
@@ -343,8 +301,8 @@ def _pick_latest_version(package_payload: dict) -> str | None:
     """Из ответа GetPackage выбрать строку latest-версии.
 
     Алгоритм:
-    1. Если есть запись с ``isDefault=True`` — берём её ``versionKey.version``.
-    2. Иначе сортируем по ``publishedAt`` (если есть) и берём максимум.
+    1. Если есть запись с isDefault=True — берём её versionKey.version.
+    2. Иначе сортируем по publishedAt (если есть) и берём максимум.
     3. Иначе — последняя в массиве.
     4. Если массив пуст — None.
     """
@@ -376,16 +334,14 @@ def _pick_latest_version(package_payload: dict) -> str | None:
     return vk.get("version")
 
 
-# ---------------------------------------------------------------------------
-# 3.6 build_report
-# ---------------------------------------------------------------------------
+# 3.6 Построение полного отчёта
 
 
 def _parse_advisories(version_payload: dict | None) -> list[Advisory]:
     """Достать advisories из ответа версии.
 
-    deps.dev возвращает поле ``advisoryKeys`` со ссылками вида
-    ``[{"id": "GHSA-xxxx"}]``. Иногда встречается ``advisories`` со
+    deps.dev возвращает поле advisoryKeys со ссылками вида
+    [{"id": "GHSA-xxxx"}]. Иногда встречается ``advisories`` со
     структурой ``[{"id": ..., "summary": ..., "severity": ...}]``. Парсим
     оба варианта.
 
@@ -452,7 +408,6 @@ async def build_report(
     ошибки → ``DepsDevError``.
     """
 
-    # 1. Дедупликация на всякий случай (Syft уже это делает, но не зависим).
     deduped: dict[tuple[str, str, str], PackageInfo] = {}
     for p in supported:
         system = SUPPORTED_ECOSYSTEMS.get(p.ecosystem)
@@ -463,7 +418,7 @@ async def build_report(
         deduped[(system, name, p.version)] = p
     unique_packages = list(deduped.values())
 
-    # 2. Что брать из кеша / по сети.
+    # что брать из кеша / по сети.
     cached_current: dict[tuple[str, str, str], dict | None] = {}
     need_current: list[PackageInfo] = []
 
@@ -491,7 +446,6 @@ async def build_report(
         else:
             need_latest_pairs[(system, name)] = None
 
-    # 3. Сетевые запросы.
     fetched_current: dict[tuple[str, str, str], dict | None] = {}
     fetched_latest: dict[tuple[str, str], str | None] = {}
 
@@ -500,9 +454,9 @@ async def build_report(
             if need_current:
                 fetched_current = await fetch_current_versions(session, need_current)
             if need_latest_pairs:
-                # Для fetch_latest_versions достаточно списка PackageInfo
+                # для fetch_latest_versions достаточно списка PackageInfo
                 # с правильным ecosystem/name; для go fallback намёкa
-                # хватает уже сохранённого purl. Создаём заглушки.
+                # хватает уже сохранённого purl
                 stubs: list[PackageInfo] = []
                 # Нам нужен ровно один PackageInfo на пару (system, name);
                 # берём первый матч из unique_packages.
@@ -515,7 +469,7 @@ async def build_report(
                         seen.add((system, name))
                 fetched_latest = await fetch_latest_versions(session, stubs)
 
-    # 4. Сохраняем в кеш.
+    # Сохраняем в кеш.
     for key, payload in fetched_current.items():
         if payload is not None:
             cache.set(key[0], key[1], key[2], payload)
@@ -523,7 +477,7 @@ async def build_report(
     for (system, name), latest in fetched_latest.items():
         cache.set(system, name, _LATEST_KEY, {"latest": latest})
 
-    # 5. Маппинг в DependencyReport.
+    #  Оборачиваем в DependencyReport.
     all_current: dict[tuple[str, str, str], dict | None] = {
         **cached_current,
         **fetched_current,
@@ -554,8 +508,6 @@ async def build_report(
                 semver_diff = None
             else:
                 semver_diff = compute_semver_diff(p.version, latest)
-                # Если парсинг версий упал — semver_diff=None, но
-                # is_outdated всё равно True (строки не равны).
                 is_outdated = True
 
         reports.append(

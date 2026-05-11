@@ -405,12 +405,8 @@ def test_litellm_not_installed(monkeypatch):
             model="gemini/gemini-2.0-flash",
             api_key=None,
         )
-<<<<<<< HEAD
-    assert "pip install tech-upd-recommender" in str(exc.value)
-=======
     # в сообщении должна быть подсказка как поставить
-    assert "pip install depscope[llm]" in str(exc.value)
->>>>>>> 2c8531a (llm module comments changed)
+    assert "pip install tech-upd-recommender" in str(exc.value)
 
 
 def test_auth_error_mapped(monkeypatch):
@@ -482,12 +478,8 @@ def test_rate_limit_retry_succeeds(monkeypatch):
         _make_completion_response("recovered"),
     ]
 
-<<<<<<< HEAD
-    monkeypatch.setattr("tech_update_recommender.llm_module.time.sleep", MagicMock())
-=======
     # снова sleep заглушим, чтобы тест не висел
-    monkeypatch.setattr("depscope.llm_module.time.sleep", MagicMock())
->>>>>>> 2c8531a (llm module comments changed)
+    monkeypatch.setattr("tech_update_recommender.llm_module.time.sleep", MagicMock())
 
     with patch.dict(sys.modules, {"litellm": fake_litellm}):
         result = generate_advice(

@@ -635,14 +635,10 @@ def generate_advice(
 
     litellm = _import_litellm()
     if litellm is None:
-<<<<<<< HEAD:tech_update_recommender/llm_module.py
+        # litellm не установлен — даём юзеру понятную команду
         raise LLMNotAvailableError(
             "litellm не установлен. Установите: pip install tech-upd-recommender"
         )
-=======
-        # litellm не установлен — даём юзеру понятную команду
-        raise LLMNotAvailableError("litellm не установлен. Установите: pip install depscope[llm]")
->>>>>>> 2c8531a (llm module comments changed):depscope/llm_module.py
 
     # сначала ужимаем вход под бюджет токенов. Если не влезет —
     # truncate_input сам кинет LLMContextOverflowError, пробрасываем
